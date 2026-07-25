@@ -557,28 +557,111 @@ function initCloudSyncOnBoot(){
   })();
 }
 
-function seedDemo(){
-  const m1={id:'m1',memberNo:'MB-001',name:'Amina Hassan',phone:'0722000001',email:'amina@example.com',dateJoined:'2025-01-15',status:'Active',emergencyContact:'Yusuf Hassan',emergencyPhone:'0722000011'};
-  const m2={id:'m2',memberNo:'MB-002',name:'John Mwangi',phone:'0722000002',email:'john@example.com',dateJoined:'2025-02-10',status:'Active',emergencyContact:'Mary Mwangi',emergencyPhone:'0722000012'};
-  const m3={id:'m3',memberNo:'MB-003',name:'Grace Wanjiru',phone:'0722000003',email:'grace@example.com',dateJoined:'2025-01-20',status:'Active',emergencyContact:'Peter Wanjiru',emergencyPhone:'0722000013'};
-  const m4={id:'m4',memberNo:'MB-004',name:'David Otieno',phone:'0722000004',email:'david@example.com',dateJoined:'2025-06-01',status:'Active',emergencyContact:'Susan Otieno',emergencyPhone:'0722000014'};
-  DB.members.push(m1,m2,m3,m4);
-  DB.users[2].memberId = 'm1';
-  ['2025-02','2025-03','2025-04','2025-05','2025-06','2025-07'].forEach((mo,i)=>{
-    DB.contributions.push({id:uid('con'),memberId:'m1',date:mo+'-05',amount:1000,method:'M-Pesa',reference:'MP'+(1000+i),status:'Full'});
-    DB.contributions.push({id:uid('con'),memberId:'m2',date:mo+'-06',amount:1000,method:'Cash',reference:'',status:'Full'});
-    DB.contributions.push({id:uid('con'),memberId:'m3',date:mo+'-07',amount:i===2?600:1000,method:'Bank',reference:'BK'+(2000+i),status:i===2?'Partial':'Full'});
-  });
-  DB.savings.push({id:uid('sav'),memberId:'m1',date:'2025-03-01',amount:5000,type:'voluntary',direction:'deposit'});
-  DB.savings.push({id:uid('sav'),memberId:'m2',date:'2025-03-15',amount:3000,type:'mandatory',direction:'deposit'});
-  DB.savings.push({id:uid('sav'),memberId:'m3',date:'2025-04-10',amount:8000,type:'voluntary',direction:'deposit'});
-  DB.penalties.push({id:uid('pen'),memberId:'m4',type:'Absent from Meeting',amount:100,reason:'Missed June meeting',dueDate:'2025-06-30',status:'Unpaid'});
-  DB.penalties.push({id:uid('pen'),memberId:'m2',type:'Late Contribution',amount:200,reason:'Paid after 5th',dueDate:'2025-05-31',status:'Paid',datePaid:'2025-06-02'});
-  DB.loans.push({id:uid('loan'),memberId:'m2',requestedAmount:6000,purpose:'School fees',dateApplied:'2025-04-01',status:'Active',approvedAmount:6000,approvalDate:'2025-04-05',interestRate:10,interestMethod:'reducing',period:6,dueDate:'2025-10-05',guarantors:[{memberId:'m1',amount:3000,released:false},{memberId:'m3',amount:3000,released:false}],repayments:[{date:'2025-05-05',amount:1050},{date:'2025-06-05',amount:1050}]});
-  DB.loans.push({id:uid('loan'),memberId:'m4',requestedAmount:2000,purpose:'Business stock',dateApplied:'2025-07-01',status:'Pending',guarantors:[],repayments:[]});
-  DB.incomeExpense.push({id:uid('ie'),type:'income',category:'Registration Fees',date:'2025-01-15',amount:500,description:'New member registration'});
-  DB.incomeExpense.push({id:uid('ie'),type:'expense',category:'Stationery',date:'2025-02-10',amount:350,description:'Ledger book and pens'});
-  DB.meetings.push({id:uid('mt'),date:'2025-06-28',agenda:'Mid-year review',resolutions:'Approved discussion on loan multiplier increase',minutes:'minutes-2025-06.pdf',attendance:[{memberId:'m1',present:true},{memberId:'m2',present:true},{memberId:'m3',present:true},{memberId:'m4',present:false}]});
+function seedTestData(){
+  const now = new Date();
+  function pad(n){ return String(n).padStart(2,'0'); }
+  function monthDate(offset){ return new Date(now.getFullYear(), now.getMonth()-offset, 1); }
+  function ym(offset){ const d = monthDate(offset); return d.getFullYear()+'-'+pad(d.getMonth()+1); }
+  function dt(offset, day){ return ym(offset)+'-'+pad(day); }
+  function pastDt(daysAgo){ const d = new Date(now); d.setDate(d.getDate()-daysAgo); return d.toISOString().slice(0,10); }
+  function futureDt(daysAhead){ const d = new Date(now); d.setDate(d.getDate()+daysAhead); return d.toISOString().slice(0,10); }
+
+  const CA = DB.settings.contributionAmount || 1000;
+
+  /* ---- Members (10, spanning statuses & join dates) ---- */
+  const members = [
+    {id:'m1',memberNo:'MB-001',name:'Amina Hassan',phone:'0722000001',email:'amina@example.com',dateJoined:pastDt(210),status:'Active',emergencyContact:'Yusuf Hassan',emergencyPhone:'0722000011'},
+    {id:'m2',memberNo:'MB-002',name:'John Mwangi',phone:'0722000002',email:'john@example.com',dateJoined:pastDt(200),status:'Active',emergencyContact:'Mary Mwangi',emergencyPhone:'0722000012'},
+    {id:'m3',memberNo:'MB-003',name:'Grace Wanjiru',phone:'0722000003',email:'grace@example.com',dateJoined:pastDt(180),status:'Active',emergencyContact:'Peter Wanjiru',emergencyPhone:'0722000013'},
+    {id:'m4',memberNo:'MB-004',name:'David Otieno',phone:'0722000004',email:'david@example.com',dateJoined:pastDt(175),status:'Active',emergencyContact:'Susan Otieno',emergencyPhone:'0722000014'},
+    {id:'m5',memberNo:'MB-005',name:'Susan Kamau',phone:'0722000005',email:'susan@example.com',dateJoined:pastDt(150),status:'Active',emergencyContact:'James Kamau',emergencyPhone:'0722000015'},
+    {id:'m6',memberNo:'MB-006',name:'Peter Njoroge',phone:'0722000006',email:'peter@example.com',dateJoined:pastDt(140),status:'Inactive',emergencyContact:'Alice Njoroge',emergencyPhone:'0722000016'},
+    {id:'m7',memberNo:'MB-007',name:'Mary Achieng',phone:'0722000007',email:'mary@example.com',dateJoined:pastDt(110),status:'Active',emergencyContact:'Tom Achieng',emergencyPhone:'0722000017'},
+    {id:'m8',memberNo:'MB-008',name:'Samuel Kiptoo',phone:'0722000008',email:'samuel@example.com',dateJoined:pastDt(95),status:'Active',emergencyContact:'Ruth Kiptoo',emergencyPhone:'0722000018'},
+    {id:'m9',memberNo:'MB-009',name:'Lucy Wambui',phone:'0722000009',email:'lucy@example.com',dateJoined:pastDt(55),status:'Active',emergencyContact:'Paul Wambui',emergencyPhone:'0722000019'},
+    {id:'m10',memberNo:'MB-010',name:'Joseph Mutua',phone:'0722000010',email:'joseph@example.com',dateJoined:pastDt(25),status:'Active',emergencyContact:'Ann Mutua',emergencyPhone:'0722000020'}
+  ];
+  DB.members.push(...members);
+
+  /* ---- Contributions: full history, partial payment, missed months, brand-new member ---- */
+  [5,4,3,2,1,0].forEach(o=> DB.contributions.push({id:uid('con'),memberId:'m1',date:dt(o,5),amount:CA,method:'M-Pesa',reference:'MP'+(1000+o),status:'Full'}));
+  [5,4,3,1,0].forEach(o=> DB.contributions.push({id:uid('con'),memberId:'m2',date:dt(o,6),amount:CA,method:'Cash',reference:'',status:'Full'})); // missed offset 2 -> outstanding
+  DB.contributions.push({id:uid('con'),memberId:'m2',date:dt(2,20),amount:600,method:'Cash',reference:'',status:'Partial'});
+  [5,4,3,2].forEach(o=> DB.contributions.push({id:uid('con'),memberId:'m3',date:dt(o,7),amount:CA,method:'Bank',reference:'BK'+(2000+o),status:'Full'})); // missed 1,0 -> outstanding/overdue
+  [4,3,2,1,0].forEach(o=> DB.contributions.push({id:uid('con'),memberId:'m4',date:dt(o,5),amount:CA,method:'M-Pesa',reference:'MP'+(3000+o),status:'Full'}));
+  [3,2,1,0].forEach(o=> DB.contributions.push({id:uid('con'),memberId:'m5',date:dt(o,8),amount:CA,method:'Cash',reference:'',status:'Full'}));
+  [3,2].forEach(o=> DB.contributions.push({id:uid('con'),memberId:'m7',date:dt(o,4),amount:CA,method:'Bank',reference:'BK'+(4000+o),status:'Full'})); // missed 1,0 -> late/outstanding
+  [2].forEach(o=> DB.contributions.push({id:uid('con'),memberId:'m8',date:dt(o,9),amount:CA,method:'M-Pesa',reference:'MP'+(5000+o),status:'Full'})); // hasn't paid current -> upcoming due
+  [1].forEach(o=> DB.contributions.push({id:uid('con'),memberId:'m9',date:dt(o,10),amount:CA,method:'M-Pesa',reference:'MP'+(6000+o),status:'Full'}));
+  // m10 (joined 25 days ago) and m6 (inactive) intentionally have no contributions yet
+
+  /* ---- Savings: mandatory & voluntary, deposits & a withdrawal ---- */
+  DB.savings.push({id:uid('sav'),memberId:'m1',date:pastDt(160),amount:5000,type:'voluntary',direction:'deposit'});
+  DB.savings.push({id:uid('sav'),memberId:'m1',date:pastDt(60),amount:2000,type:'voluntary',direction:'deposit'});
+  DB.savings.push({id:uid('sav'),memberId:'m2',date:pastDt(150),amount:3000,type:'mandatory',direction:'deposit'});
+  DB.savings.push({id:uid('sav'),memberId:'m3',date:pastDt(140),amount:8000,type:'voluntary',direction:'deposit'});
+  DB.savings.push({id:uid('sav'),memberId:'m3',date:pastDt(40),amount:2000,type:'voluntary',direction:'withdrawal'});
+  DB.savings.push({id:uid('sav'),memberId:'m4',date:pastDt(120),amount:1500,type:'mandatory',direction:'deposit'});
+  DB.savings.push({id:uid('sav'),memberId:'m5',date:pastDt(90),amount:4000,type:'voluntary',direction:'deposit'});
+  DB.savings.push({id:uid('sav'),memberId:'m6',date:pastDt(130),amount:500,type:'mandatory',direction:'deposit'});
+  DB.savings.push({id:uid('sav'),memberId:'m7',date:pastDt(80),amount:2000,type:'mandatory',direction:'deposit'});
+  DB.savings.push({id:uid('sav'),memberId:'m7',date:pastDt(30),amount:1000,type:'voluntary',direction:'deposit'});
+  DB.savings.push({id:uid('sav'),memberId:'m8',date:pastDt(70),amount:6000,type:'voluntary',direction:'deposit'});
+  DB.savings.push({id:uid('sav'),memberId:'m9',date:pastDt(35),amount:1000,type:'mandatory',direction:'deposit'});
+  DB.savings.push({id:uid('sav'),memberId:'m10',date:pastDt(10),amount:500,type:'voluntary',direction:'deposit'});
+
+  /* ---- Penalties: every type & status ---- */
+  DB.penalties.push({id:uid('pen'),memberId:'m4',type:'Absent from Meeting',amount:100,reason:'Missed quarterly meeting',dueDate:pastDt(10),status:'Unpaid'});
+  DB.penalties.push({id:uid('pen'),memberId:'m2',type:'Late Contribution',amount:200,reason:'Paid after the 5th',dueDate:pastDt(45),status:'Paid',datePaid:pastDt(40)});
+  DB.penalties.push({id:uid('pen'),memberId:'m5',type:'Late Attendance',amount:50,reason:'Arrived after roll call',dueDate:pastDt(20),status:'Unpaid'});
+  DB.penalties.push({id:uid('pen'),memberId:'m6',type:'Misconduct',amount:300,reason:'Conduct warning',dueDate:pastDt(100),status:'Paid',datePaid:pastDt(95)});
+  DB.penalties.push({id:uid('pen'),memberId:'m8',type:'Absent from Meeting',amount:100,reason:'Missed last meeting — overdue',dueDate:pastDt(15),status:'Unpaid'});
+  DB.penalties.push({id:uid('pen'),memberId:'m9',type:'Late Contribution',amount:200,reason:'Contribution paid late',dueDate:pastDt(5),status:'Unpaid'});
+
+  /* ---- Loans: pending, active (with arrears), closed, rejected — with guarantors & repayments ---- */
+  DB.loans.push({id:uid('loan'),memberId:'m2',requestedAmount:6000,purpose:'School fees',dateApplied:pastDt(150),status:'Active',approvedAmount:6000,approvalDate:pastDt(145),interestRate:DB.settings.loanInterestRate,interestMethod:DB.settings.interestMethod,period:6,dueDate:futureDt(15),
+    guarantors:[{memberId:'m1',amount:3000,released:false},{memberId:'m3',amount:3000,released:false}],
+    repayments:[{date:pastDt(115),amount:1150},{date:pastDt(85),amount:1150},{date:pastDt(55),amount:1150}]});
+  DB.loans.push({id:uid('loan'),memberId:'m4',requestedAmount:2000,purpose:'Business stock',dateApplied:pastDt(6),status:'Pending',guarantors:[],repayments:[]});
+  DB.loans.push({id:uid('loan'),memberId:'m5',requestedAmount:15000,purpose:'Land deposit',dateApplied:pastDt(60),status:'Rejected',guarantors:[],repayments:[]});
+  DB.loans.push({id:uid('loan'),memberId:'m3',requestedAmount:4000,purpose:'Medical bill',dateApplied:pastDt(170),status:'Closed',approvedAmount:4000,approvalDate:pastDt(165),interestRate:DB.settings.loanInterestRate,interestMethod:DB.settings.interestMethod,period:4,dueDate:pastDt(45),
+    guarantors:[{memberId:'m1',amount:2000,released:true},{memberId:'m7',amount:2000,released:true}],
+    repayments:[{date:pastDt(135),amount:1100},{date:pastDt(105),amount:1100},{date:pastDt(75),amount:1100},{date:pastDt(45),amount:1100}]});
+  DB.loans.push({id:uid('loan'),memberId:'m8',requestedAmount:5000,purpose:'Farm inputs',dateApplied:pastDt(100),status:'Active',approvedAmount:5000,approvalDate:pastDt(95),interestRate:DB.settings.loanInterestRate,interestMethod:DB.settings.interestMethod,period:5,dueDate:pastDt(20),
+    guarantors:[{memberId:'m9',amount:2500,released:false},{memberId:'m10',amount:2500,released:false}],
+    repayments:[{date:pastDt(65),amount:1100}]}); // overdue — only 1 of 5 installments paid, tests arrears/defaulters reports
+  DB.loans.push({id:uid('loan'),memberId:'m9',requestedAmount:3000,purpose:'Shop rent',dateApplied:pastDt(30),status:'Active',approvedAmount:3000,approvalDate:pastDt(27),interestRate:DB.settings.loanInterestRate,interestMethod:DB.settings.interestMethod,period:3,dueDate:futureDt(45),
+    guarantors:[{memberId:'m1',amount:1500,released:false}],
+    repayments:[]});
+
+  /* ---- Income & Expenses: every category, spread across months ---- */
+  DB.incomeExpense.push({id:uid('ie'),type:'income',category:'Registration Fees',date:pastDt(200),amount:500,description:'New member registration — Amina Hassan'});
+  DB.incomeExpense.push({id:uid('ie'),type:'income',category:'Registration Fees',date:pastDt(25),amount:500,description:'New member registration — Joseph Mutua'});
+  DB.incomeExpense.push({id:uid('ie'),type:'income',category:'Interest Received',date:pastDt(85),amount:1150,description:'Loan interest — John Mwangi'});
+  DB.incomeExpense.push({id:uid('ie'),type:'income',category:'Donations',date:pastDt(60),amount:2000,description:'Well-wisher contribution'});
+  DB.incomeExpense.push({id:uid('ie'),type:'income',category:'Other Income',date:pastDt(30),amount:300,description:'Sale of old ledger equipment'});
+  DB.incomeExpense.push({id:uid('ie'),type:'expense',category:'Stationery',date:pastDt(180),amount:350,description:'Ledger book and pens'});
+  DB.incomeExpense.push({id:uid('ie'),type:'expense',category:'Bank Charges',date:pastDt(90),amount:150,description:'Monthly account maintenance fee'});
+  DB.incomeExpense.push({id:uid('ie'),type:'expense',category:'Meeting Expenses',date:pastDt(45),amount:800,description:'Refreshments for quarterly meeting'});
+  DB.incomeExpense.push({id:uid('ie'),type:'expense',category:'Transport',date:pastDt(20),amount:400,description:'Committee site visit'});
+  DB.incomeExpense.push({id:uid('ie'),type:'expense',category:'Miscellaneous',date:pastDt(10),amount:250,description:'Printing and photocopying'});
+
+  /* ---- Meetings: attendance across all members, tied to the absence penalties above ---- */
+  DB.meetings.push({id:uid('mt'),date:pastDt(100),agenda:'Quarterly review',resolutions:'Approved increase of loan multiplier from 2x to 3x savings.',minutes:'minutes-q-review.pdf',
+    attendance:members.map(m=>({memberId:m.id, present:!['m4','m6'].includes(m.id)}))});
+  DB.meetings.push({id:uid('mt'),date:pastDt(45),agenda:'Loan applications review',resolutions:'Approved Samuel Kiptoo farm input loan; rejected Susan Kamau land deposit loan pending more guarantors.',minutes:'Discussed loan defaults and agreed on a grace period reminder policy.',
+    attendance:members.map(m=>({memberId:m.id, present:!['m5','m8'].includes(m.id)}))});
+  DB.meetings.push({id:uid('mt'),date:futureDt(10),agenda:'Upcoming AGM planning',resolutions:'',minutes:'',
+    attendance:members.map(m=>({memberId:m.id, present:false}))});
+
+  /* ---- Dividends: one prior-year distribution across all members ---- */
+  const weightFn = m => computeMemberSavings(m.id) + computeMemberContributionsPaid(m.id);
+  const totalWeight = members.reduce((s,m)=>s+weightFn(m),0) || 1;
+  const distProfit = 12000;
+  DB.dividends.push({id:uid('dv'), year:String(now.getFullYear()-1), totalProfit:distProfit, date:pastDt(200),
+    distributions: members.map(m=>({memberId:m.id, basis:weightFn(m), amount: distProfit*(weightFn(m)/totalWeight)}))});
+
+  logAudit('Loaded sample test dataset (10 members)', null, {members:10});
 }
 
 function logAudit(action, oldV, newV){
@@ -1994,6 +2077,16 @@ function renderSettings(){
       <label class="btn" style="cursor:pointer">Restore from Backup<input type="file" id="restoreFile" accept="application/json" style="display:none" onchange="restoreBackup(event)"></label>
     </div>
     <div class="form-note" style="margin-top:10px">Data auto-saves to this browser's storage on every change — the app works fully offline. Download a backup regularly for safekeeping.</div>
+    <div class="section-title" style="margin-top:18px">Sample Test Data</div>
+    <div class="form-note">Populate the app with 10 sample members and realistic contributions, savings, loans, penalties, meetings, income/expenses and a dividend payout — useful for exploring every feature before you go live.</div>
+    <div class="row-actions" style="margin-top:8px">
+      <button class="btn btn-gold" onclick="loadTestData()">Load Sample Test Data</button>
+    </div>
+    <div class="section-title" style="margin-top:18px;color:var(--red)">Danger Zone</div>
+    <div class="form-note">Permanently erase every member, transaction, user and setting on this device — use this once you're ready to stop testing and start entering your real group's data.</div>
+    <div class="row-actions" style="margin-top:8px">
+      <button class="btn btn-danger" onclick="clearAllData()">Clear All Data</button>
+    </div>
   </div>
   <div class="card" id="cloudSyncCard">
     <div class="card-head"><h3>Cloud Sync (Firebase)</h3><span class="tag tag-gray" id="cloudStatusPill">Not connected</span></div>
@@ -2041,6 +2134,26 @@ function restoreBackup(e){
   const r = new FileReader();
   r.onload = () => { try{ DB = JSON.parse(r.result); saveDB(); toast('Backup restored'); location.reload(); } catch(err){ toast('Invalid backup file'); } };
   r.readAsText(f);
+}
+function loadTestData(){
+  if(!confirm('This will replace all Members, Contributions, Savings, Penalties, Loans, Income & Expenses, Meetings and Dividends with a sample 10-member dataset for testing.\n\nYour own login and Settings will not be touched. Continue?')) return;
+  DB.members = []; DB.contributions = []; DB.savings = []; DB.penalties = []; DB.loans = [];
+  DB.incomeExpense = []; DB.meetings = []; DB.dividends = [];
+  seedTestData();
+  saveDB();
+  toast('Sample test data loaded — 10 members with contributions, savings, loans, penalties, meetings & more');
+  initNav(); showPage(currentPage||'dashboard');
+}
+function clearAllData(){
+  if(!confirm("This permanently deletes EVERYTHING in this group — all members, transactions, users and settings — so you can start fresh with real data.\n\nThis cannot be undone. Continue?")) return;
+  const phrase = prompt('Type DELETE to confirm you want to erase all data on this device:');
+  if(phrase !== 'DELETE'){ toast('Cancelled — nothing was deleted'); return; }
+  localStorage.removeItem('gfm_db_v1');
+  localStorage.removeItem('gfm_firebase_config');
+  localStorage.removeItem('gfm_cloud_groupid');
+  localStorage.removeItem('gfm_sb_collapsed');
+  if(fbUnsub) fbUnsub();
+  location.reload();
 }
 
 /* ---------------------- Users & Roles ---------------------- */
