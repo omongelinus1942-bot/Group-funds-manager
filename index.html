@@ -1,0 +1,2207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0F2E2C">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="GFM">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="description" content="GFM — Group Funds Manager, powered by Omlin.">
+<link rel="manifest" id="manifestLink" href="manifest.json">
+<link rel="icon" id="faviconLink" type="image/png" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" id="appleIconLink" href="icons/apple-touch-icon.png">
+<title>GFM — Group Funds Manager</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<style>
+:root{
+  --navy:#0F2E2C;
+  --navy-light:#164B47;
+  --navy-lighter:#1D625C;
+  --gold:#C6952F;
+  --gold-light:#E4B85C;
+  --bg:#F2F5F3;
+  --card:#FFFFFF;
+  --text:#152521;
+  --muted:#647672;
+  --border:#E2E8E5;
+  --green:#2E7D53;
+  --green-bg:#E7F3EC;
+  --red:#C1462B;
+  --red-bg:#FBEAE5;
+  --amber:#C98A2C;
+  --amber-bg:#FBF0DF;
+  --blue:#2C5F8A;
+  --blue-bg:#E8F0F6;
+  --radius:10px;
+  --mono: ui-monospace, 'SF Mono', 'Cascadia Mono', Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{
+  font-family:var(--sans);
+  background:var(--bg);
+  color:var(--text);
+  font-size:14px;
+  -webkit-font-smoothing:antialiased;
+}
+button{font-family:inherit;}
+a{color:inherit;}
+::-webkit-scrollbar{width:10px;height:10px;}
+::-webkit-scrollbar-thumb{background:#cfd8d4;border-radius:6px;}
+
+/* ---------- LOGIN ---------- */
+#loginScreen{
+  position:fixed;inset:0;background:linear-gradient(160deg,var(--navy),#0A1F1E);
+  display:flex;align-items:center;justify-content:center;z-index:999;
+}
+.login-card{
+  background:var(--card);width:360px;border-radius:14px;padding:36px 32px;
+  box-shadow:0 20px 60px rgba(0,0,0,.35);
+}
+.login-logo{
+  width:52px;height:52px;border-radius:12px;background:var(--gold);
+  display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--navy);
+  font-size:22px;margin-bottom:16px;
+}
+.login-card h1{font-size:20px;margin:0 0 4px;}
+.login-card p.sub{color:var(--muted);margin:0 0 22px;font-size:13px;}
+.login-card label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin:14px 0 6px;text-transform:uppercase;letter-spacing:.04em;}
+.login-card input,.login-card select{
+  width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:#fafcfb;
+}
+.login-btn{
+  margin-top:22px;width:100%;padding:11px;border:none;border-radius:8px;background:var(--gold);
+  color:var(--navy);font-weight:700;font-size:14px;cursor:pointer;letter-spacing:.02em;
+}
+.login-btn:hover{background:var(--gold-light);}
+.login-hint{margin-top:14px;font-size:11.5px;color:var(--muted);line-height:1.5;background:#f5f7f6;padding:10px 12px;border-radius:8px;}
+.login-error{color:var(--red);font-size:12.5px;margin-top:10px;display:none;}
+.pass-wrap{position:relative;}
+.pass-wrap input{padding-right:40px !important;}
+.pass-toggle{position:absolute;right:4px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--muted);font-size:15px;padding:6px 8px;}
+.pass-toggle:hover{color:var(--navy);}
+.auth-tabs{display:flex;gap:4px;background:#f0f2f1;border-radius:9px;padding:3px;margin-bottom:18px;}
+.auth-tab{flex:1;text-align:center;padding:8px;border-radius:7px;font-size:12.5px;font-weight:700;cursor:pointer;color:var(--muted);}
+.auth-tab.active{background:#fff;color:var(--navy);box-shadow:0 1px 3px rgba(0,0,0,.12);}
+.auth-panel{display:none;}
+.auth-panel.active{display:block;}
+
+/* ---------- APP SHELL ---------- */
+#app{display:none;min-height:100vh;}
+.shell{display:flex;min-height:100vh;}
+.sidebar{
+  width:236px;background:var(--navy);color:#EAF3F0;flex-shrink:0;
+  display:flex;flex-direction:column;position:fixed;top:0;bottom:0;left:0;overflow-y:auto;
+  z-index:400;transition:width .18s ease, transform .18s ease;
+}
+.brand{display:flex;align-items:center;gap:10px;padding:20px 18px 16px;border-bottom:1px solid rgba(255,255,255,.08);}
+.brand-mark{width:34px;height:34px;border-radius:9px;background:var(--gold);color:var(--navy);font-weight:800;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;}
+.brand-name{font-size:14.5px;font-weight:700;line-height:1.2;white-space:nowrap;overflow:hidden;}
+.brand-sub{font-size:10.5px;color:#9FC3BC;letter-spacing:.05em;text-transform:uppercase;white-space:nowrap;overflow:hidden;}
+
+.nav{padding:12px 10px;flex:1;}
+.nav-group-label{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:#7CA69E;margin:16px 10px 6px;font-weight:700;}
+.nav-item{
+  display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;cursor:pointer;
+  color:#CFE4DF;font-size:13.3px;margin-bottom:2px;border-left:3px solid transparent;user-select:none;white-space:nowrap;overflow:hidden;
+}
+.nav-item:hover{background:rgba(255,255,255,.06);}
+.nav-item.active{background:var(--navy-light);color:#fff;border-left:3px solid var(--gold);font-weight:600;}
+.nav-icon{width:18px;text-align:center;font-size:14px;flex-shrink:0;}
+
+.sidebar-foot{padding:14px 16px;border-top:1px solid rgba(255,255,255,.08);font-size:12px;}
+.who{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
+.who-avatar{width:28px;height:28px;border-radius:50%;background:var(--gold);color:var(--navy);font-weight:700;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;}
+.who-name{font-weight:600;color:#fff;font-size:12.5px;white-space:nowrap;overflow:hidden;}
+.who-role{color:#8FB8B1;font-size:10.5px;white-space:nowrap;overflow:hidden;}
+.logout-btn{width:100%;padding:7px;border-radius:7px;border:1px solid rgba(255,255,255,.18);background:transparent;color:#CFE4DF;cursor:pointer;font-size:12px;}
+.logout-btn:hover{background:rgba(255,255,255,.08);}
+.sidebar-collapse-btn{width:100%;padding:7px;border-radius:7px;border:1px solid rgba(255,255,255,.18);background:transparent;color:#CFE4DF;cursor:pointer;font-size:11.5px;margin-top:8px;display:flex;align-items:center;justify-content:center;gap:6px;}
+.sidebar-collapse-btn:hover{background:rgba(255,255,255,.08);}
+
+/* Collapsed (desktop icon-only) */
+.shell.sb-collapsed .sidebar{width:64px;}
+.shell.sb-collapsed .sidebar .brand-name,.shell.sb-collapsed .sidebar .brand-sub,
+.shell.sb-collapsed .sidebar .nav-item span:not(.nav-icon),.shell.sb-collapsed .sidebar .nav-item{justify-content:center;}
+.shell.sb-collapsed .sidebar .nav-item{gap:0;}
+.shell.sb-collapsed .brand{justify-content:center;padding:20px 8px 16px;}
+.shell.sb-collapsed .who-name,.shell.sb-collapsed .who-role{display:none;}
+.shell.sb-collapsed .who{justify-content:center;}
+.shell.sb-collapsed .logout-btn span.lbl,.shell.sb-collapsed .sidebar-collapse-btn span.lbl{display:none;}
+.shell.sb-collapsed .main{margin-left:64px;}
+.shell.sb-collapsed .nav-label{display:none;}
+
+.sidebar-backdrop{display:none;position:fixed;inset:0;background:rgba(10,20,18,.5);z-index:390;}
+.hamburger-btn{display:none;background:var(--navy);color:#fff;border:none;border-radius:8px;width:38px;height:38px;font-size:17px;cursor:pointer;align-items:center;justify-content:center;flex-shrink:0;}
+
+.main{margin-left:236px;flex:1;min-width:0;padding:24px 30px 60px;transition:margin-left .18s ease;}
+.topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:22px;gap:12px;}
+.topbar-left{display:flex;align-items:center;gap:12px;min-width:0;}
+.topbar h2{margin:0;font-size:21px;}
+.topbar .crumbs{color:var(--muted);font-size:12.5px;margin-top:2px;}
+.topbar-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+
+.page{display:none;}
+.page.active{display:block;animation:fadein .18s ease;}
+@keyframes fadein{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:none;}}
+
+.app-footer{text-align:center;color:var(--muted);font-size:11px;padding:22px 0 6px;letter-spacing:.03em;}
+.app-footer b{color:var(--navy);}
+
+/* ---------- CARDS / GRID ---------- */
+.grid{display:grid;gap:16px;}
+.grid-4{grid-template-columns:repeat(4,1fr);}
+.grid-3{grid-template-columns:repeat(3,1fr);}
+.grid-2{grid-template-columns:repeat(2,1fr);}
+@media(max-width:1100px){.grid-4{grid-template-columns:repeat(2,1fr);}.grid-3{grid-template-columns:repeat(2,1fr);}}
+
+/* ---------- MOBILE ---------- */
+@media(max-width:860px){
+  .hamburger-btn{display:flex;}
+  .sidebar{transform:translateX(-100%);width:250px !important;}
+  .shell.sb-mobile-open .sidebar{transform:translateX(0);box-shadow:0 0 40px rgba(0,0,0,.35);}
+  .shell.sb-mobile-open .sidebar-backdrop{display:block;}
+  .main{margin-left:0 !important;padding:16px 14px 50px;}
+  .shell.sb-collapsed .main{margin-left:0 !important;}
+  .grid-4,.grid-3,.grid-2{grid-template-columns:1fr !important;}
+  .split{flex-direction:column;}
+  .topbar{flex-wrap:wrap;}
+  .topbar h2{font-size:18px;}
+  .field-row{grid-template-columns:1fr;}
+  .modal{width:100%;padding:20px 16px;}
+  .login-card{width:100%;padding:28px 22px;}
+  .stat-value{font-size:19px;}
+  table{font-size:12.5px;}
+  th,td{padding:8px 9px;}
+}
+@media(max-width:420px){
+  .login-card{padding:22px 16px;}
+}
+
+.stat-card{
+  background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+  padding:16px 18px;position:relative;overflow:hidden;
+}
+.stat-card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--gold);}
+.stat-label{font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;font-weight:600;}
+.stat-value{font-family:var(--mono);font-size:22px;font-weight:700;margin-top:6px;color:var(--navy);}
+.stat-sub{font-size:11.5px;color:var(--muted);margin-top:4px;}
+.stat-card.warn::before{background:var(--red);}
+.stat-card.green::before{background:var(--green);}
+.stat-card.blue::before{background:var(--blue);}
+
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;margin-bottom:18px;}
+.card-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
+.card-head h3{margin:0;font-size:15px;}
+.card-head .hint{font-size:11.5px;color:var(--muted);}
+
+/* ---------- BUTTONS ---------- */
+.btn{
+  padding:8px 14px;border-radius:7px;border:1px solid var(--border);background:#fff;color:var(--text);
+  font-size:13px;cursor:pointer;font-weight:600;display:inline-flex;align-items:center;gap:6px;
+}
+.btn:hover{background:#f4f6f5;}
+.btn-primary{background:var(--navy);border-color:var(--navy);color:#fff;}
+.btn-primary:hover{background:var(--navy-light);}
+.btn-gold{background:var(--gold);border-color:var(--gold);color:var(--navy);}
+.btn-gold:hover{background:var(--gold-light);}
+.btn-danger{background:var(--red-bg);border-color:#f0c9bd;color:var(--red);}
+.btn-danger:hover{background:#f7d9cf;}
+.btn-sm{padding:5px 9px;font-size:12px;border-radius:6px;}
+.btn:disabled{opacity:.5;cursor:not-allowed;}
+
+/* ---------- TABLES ---------- */
+.table-wrap{overflow-x:auto;}
+table{width:100%;border-collapse:collapse;font-size:13px;}
+th{
+  text-align:left;padding:9px 12px;background:#F7F9F8;color:var(--muted);font-weight:700;
+  font-size:11px;text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid var(--border);white-space:nowrap;
+}
+td{padding:10px 12px;border-bottom:1px solid var(--border);white-space:nowrap;}
+tbody tr:hover{background:#FAFBFA;}
+.num{font-family:var(--mono);text-align:right;}
+.tag{padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700;display:inline-block;}
+.tag-green{background:var(--green-bg);color:var(--green);}
+.tag-red{background:var(--red-bg);color:var(--red);}
+.tag-amber{background:var(--amber-bg);color:var(--amber);}
+.tag-blue{background:var(--blue-bg);color:var(--blue);}
+.tag-gray{background:#eef0ef;color:var(--muted);}
+.row-actions{display:flex;gap:6px;}
+.empty-row td{text-align:center;color:var(--muted);padding:26px;}
+
+/* ---------- FORMS / TOOLBAR ---------- */
+.toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px;}
+.toolbar input,.toolbar select{
+  padding:8px 10px;border:1px solid var(--border);border-radius:7px;font-size:13px;background:#fff;
+}
+.search-input{min-width:220px;}
+.field{margin-bottom:14px;}
+.field label{display:block;font-size:12px;font-weight:700;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.03em;}
+.field input,.field select,.field textarea{
+  width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:7px;font-size:13.5px;background:#fafcfb;
+}
+.field textarea{resize:vertical;min-height:64px;}
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.checkbox-row{display:flex;align-items:center;gap:8px;}
+.checkbox-row input{width:auto;}
+.form-note{font-size:11.5px;color:var(--muted);margin-top:-6px;margin-bottom:12px;}
+
+/* ---------- MODAL ---------- */
+.modal-backdrop{position:fixed;inset:0;background:rgba(10,20,18,.5);display:none;align-items:flex-start;justify-content:center;z-index:500;overflow-y:auto;padding:40px 20px;}
+.modal-backdrop.active{display:flex;}
+.modal{background:#fff;border-radius:12px;width:520px;max-width:100%;padding:24px 26px;box-shadow:0 20px 60px rgba(0,0,0,.3);}
+.modal h3{margin:0 0 4px;font-size:17px;}
+.modal .modal-sub{color:var(--muted);font-size:12.5px;margin-bottom:18px;}
+.modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:6px;}
+.modal-close{position:absolute;}
+
+/* ---------- MISC ---------- */
+.badge-count{background:var(--gold);color:var(--navy);border-radius:20px;font-size:10.5px;font-weight:800;padding:1px 7px;margin-left:auto;}
+.split{display:flex;gap:18px;}
+.split > div{flex:1;min-width:0;}
+.muted{color:var(--muted);}
+.section-title{font-size:13px;font-weight:800;color:var(--navy);text-transform:uppercase;letter-spacing:.04em;margin:20px 0 10px;}
+.pill-tabs{display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap;}
+.pill-tab{padding:7px 13px;border-radius:20px;border:1px solid var(--border);background:#fff;font-size:12.5px;cursor:pointer;font-weight:600;color:var(--muted);}
+.pill-tab.active{background:var(--navy);color:#fff;border-color:var(--navy);}
+.profile-header{display:flex;align-items:center;gap:16px;margin-bottom:6px;}
+.profile-avatar{width:56px;height:56px;border-radius:50%;background:var(--navy);color:var(--gold);font-weight:800;font-size:20px;display:flex;align-items:center;justify-content:center;}
+.kv{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px dashed var(--border);font-size:13px;}
+.kv:last-child{border-bottom:none;}
+.kv .k{color:var(--muted);}
+.toast-wrap{position:fixed;top:18px;right:18px;z-index:700;display:flex;flex-direction:column;gap:8px;}
+.toast{background:var(--navy);color:#fff;padding:11px 16px;border-radius:8px;font-size:13px;box-shadow:0 8px 20px rgba(0,0,0,.25);border-left:4px solid var(--gold);animation:fadein .2s ease;}
+.progress-bar{height:7px;background:#eef0ef;border-radius:6px;overflow:hidden;}
+.progress-fill{height:100%;background:var(--gold);}
+.empty-state{text-align:center;padding:50px 20px;color:var(--muted);}
+.empty-state .em-icon{font-size:34px;margin-bottom:10px;}
+@media print{
+  .sidebar,.topbar-actions,.toolbar,.no-print{display:none !important;}
+  .main{margin-left:0 !important;}
+  body{background:#fff;}
+}
+</style>
+</head>
+<body>
+
+<!-- ================= LOGIN ================= -->
+<div id="loginScreen">
+  <div class="login-card">
+    <div class="login-logo">G</div>
+    <h1 id="loginGroupName">Group Funds Manager</h1>
+    <p class="sub" id="loginSub">Sign in to manage your group's finances</p>
+    <div class="auth-tabs" id="authTabs">
+      <div class="auth-tab active" id="tabLoginBtn" onclick="setAuthTab('login')">Sign In</div>
+      <div class="auth-tab" id="tabCreateBtn" onclick="setAuthTab('create')">Set Up a Group</div>
+    </div>
+
+    <div class="auth-panel active" id="panelLogin">
+      <label>Username</label>
+      <input id="loginUser" placeholder="Your username" autocomplete="username">
+      <label>Password</label>
+      <div class="pass-wrap">
+        <input id="loginPass" type="password" placeholder="••••••••" autocomplete="current-password">
+        <button type="button" class="pass-toggle" onclick="togglePass('loginPass',this)">&#128065;</button>
+      </div>
+      <div class="login-error" id="loginError">Invalid username or password.</div>
+      <button class="login-btn" onclick="doLogin()">Sign In</button>
+      <div class="login-hint" id="loginHint">Don't have an account? Ask your group's admin to create a login for you and share the username and password with you.</div>
+    </div>
+
+    <div class="auth-panel" id="panelCreate">
+      <label>Group Name</label>
+      <input id="regGroupName" placeholder="e.g. Amani Chama Group">
+      <label>Your Full Name</label>
+      <input id="regName" placeholder="e.g. Jane Wanjiku">
+      <label>Choose Username</label>
+      <input id="regUser" placeholder="e.g. jane.w" autocomplete="username">
+      <label>Password</label>
+      <div class="pass-wrap">
+        <input id="regPass" type="password" placeholder="Create a password" autocomplete="new-password">
+        <button type="button" class="pass-toggle" onclick="togglePass('regPass',this)">&#128065;</button>
+      </div>
+      <label>Confirm Password</label>
+      <div class="pass-wrap">
+        <input id="regPass2" type="password" placeholder="Repeat password" autocomplete="new-password">
+        <button type="button" class="pass-toggle" onclick="togglePass('regPass2',this)">&#128065;</button>
+      </div>
+      <div class="login-error" id="regError">Please check the details above.</div>
+      <button class="login-btn" onclick="doRegister()">Create Group &amp; Admin Account</button>
+      <div class="login-hint">This creates your group and makes you its <b>Super Admin</b>. From there, you create logins for every other admin and member — nobody else can self-register.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= APP ================= -->
+<div id="app">
+<div class="shell" id="shell">
+  <div class="sidebar" id="sidebar">
+    <div class="brand">
+      <div class="brand-mark">G</div>
+      <div>
+        <div class="brand-name" id="sbGroupName">Group Funds Manager</div>
+        <div class="brand-sub">GFM Suite</div>
+      </div>
+    </div>
+    <div class="nav" id="navList"></div>
+    <div class="sidebar-foot">
+      <div class="who">
+        <div class="who-avatar" id="whoAvatar">A</div>
+        <div>
+          <div class="who-name" id="whoName">Admin</div>
+          <div class="who-role" id="whoRole">Super Admin</div>
+        </div>
+      </div>
+      <button class="logout-btn" onclick="doLogout()"><span class="lbl">Sign out</span><span class="ic">&#9211;</span></button>
+      <button class="sidebar-collapse-btn" id="collapseBtn" onclick="toggleSidebarCollapse()"><span class="ic">&#9776;</span><span class="lbl">Collapse menu</span></button>
+    </div>
+  </div>
+  <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="closeMobileSidebar()"></div>
+
+  <div class="main">
+    <div class="topbar no-print">
+      <div class="topbar-left">
+        <button class="hamburger-btn" id="hamburgerBtn" onclick="toggleMobileSidebar()">&#9776;</button>
+        <div>
+          <h2 id="pageTitle">Dashboard</h2>
+          <div class="crumbs" id="pageCrumb">Overview of group finances</div>
+        </div>
+      </div>
+      <div class="topbar-actions" id="pageActions"></div>
+    </div>
+
+    <div id="pages"></div>
+    <div class="app-footer no-print">GFM — Group Funds Manager &nbsp;·&nbsp; Powered by <b>Omlin</b></div>
+  </div>
+</div>
+</div>
+
+<div class="modal-backdrop" id="modalBackdrop">
+  <div class="modal" id="modalBox"></div>
+</div>
+
+<div class="toast-wrap" id="toastWrap"></div>
+
+<script>
+/* ===================== GFM — Group Funds Manager ===================== */
+/* Data persists to localStorage. This is a self-contained demo app.     */
+
+let DB = null;
+let currentUser = null;
+let currentPage = 'dashboard';
+let currentProfileId = null;
+let currentLoanId = null;
+let profileTab = 'overview';
+let reportTab = 'contributions';
+
+const INCOME_CATS = ['Interest Received','Penalties','Registration Fees','Donations','Other Income'];
+const EXPENSE_CATS = ['Stationery','Bank Charges','Meeting Expenses','Transport','Miscellaneous'];
+
+const NAV = [
+  {key:'dashboard', label:'Dashboard', icon:'&#9635;'},
+  {key:'members', label:'Members', icon:'&#128100;'},
+  {key:'contributions', label:'Contributions', icon:'&#128181;'},
+  {key:'savings', label:'Savings', icon:'&#127974;'},
+  {key:'penalties', label:'Penalties', icon:'&#9873;'},
+  {key:'loans', label:'Loans', icon:'&#128179;'},
+  {key:'guarantors', label:'Guarantors', icon:'&#129309;'},
+  {key:'incomeexpense', label:'Income &amp; Expenses', icon:'&#128200;'},
+  {key:'cashbook', label:'Cashbook', icon:'&#128213;'},
+  {key:'reports', label:'Reports', icon:'&#128196;'},
+  {key:'statements', label:'Member Statements', icon:'&#129534;'},
+  {key:'notifications', label:'Notifications', icon:'&#128276;'},
+  {key:'meetings', label:'Meetings', icon:'&#128197;'},
+  {key:'dividends', label:'Dividends', icon:'&#127873;'},
+  {key:'users', label:'Users &amp; Roles', icon:'&#128272;'},
+  {key:'settings', label:'Settings', icon:'&#9881;'},
+  {key:'audit', label:'Audit Trail', icon:'&#128373;'},
+];
+const MEMBER_ROLE_PAGES = ['dashboard','statements'];
+const PAGE_CRUMBS = {
+  dashboard:'Overview of group finances', members:'Register and manage members', contributions:'Monthly contribution tracking',
+  savings:'Member savings deposits and withdrawals', penalties:'Fines and penalty tracking', loans:'Loan applications and repayments',
+  guarantors:'Guarantor commitments and exposure', incomeexpense:'Other income and operating expenses', cashbook:'Full transaction ledger',
+  reports:'Financial reports and exports', statements:'Individual member statements', notifications:'Upcoming reminders and alerts',
+  meetings:'Meeting records and attendance', dividends:'Year-end profit distribution', users:'User accounts and roles',
+  settings:'Group configuration', audit:'System activity log'
+};
+
+/* ---------------------- Data layer ---------------------- */
+function defaultDB(){
+  return {
+    settings:{
+      groupName:'', contributionAmount:1000, loanInterestRate:10, interestMethod:'reducing',
+      loanMultiplier:3, currency:'KES', financialYearStart:(new Date().getFullYear())+'-01-01',
+      allowWithdrawals:true, dividendWeight:'both', notifySMS:false, notifyWA:false, notifyEmail:false,
+      penaltyTypes:[{name:'Late Contribution',amount:200},{name:'Absent from Meeting',amount:100},{name:'Late Attendance',amount:50},{name:'Misconduct',amount:300}]
+    },
+    users:[],
+    members:[], contributions:[], savings:[], penalties:[], loans:[], incomeExpense:[], meetings:[], dividends:[], audit:[]
+  };
+}
+function loadDB(){
+  const raw = localStorage.getItem('gfm_db_v1');
+  if(raw){ try{ DB = JSON.parse(raw); }catch(e){ DB = defaultDB(); } }
+  else { DB = defaultDB(); saveDB(); }
+}
+function saveDB(){
+  localStorage.setItem('gfm_db_v1', JSON.stringify(DB));
+  cloudPush();
+}
+
+/* ---------------------- Cloud Sync (Firebase Firestore) ----------------------
+   Works fully offline on localStorage alone. If a Firebase project is connected
+   in Settings, changes are additionally synced to Firestore, which keeps its own
+   offline queue and syncs automatically once the device is back online.        */
+let fbApp = null, fbDb = null, fbAuth = null, fbUnsub = null;
+let cloudStatus = 'off'; // off | connecting | online | offline | error
+let cloudGroupId = localStorage.getItem('gfm_cloud_groupid') || null;
+let suppressCloudPush = false;
+
+function getFirebaseConfig(){
+  try{ return JSON.parse(localStorage.getItem('gfm_firebase_config')||'null'); }catch(e){ return null; }
+}
+function setCloudStatus(s){
+  cloudStatus = s;
+  const el = document.getElementById('cloudStatusPill');
+  if(el){
+    const map = {off:['Not connected','tag-gray'], connecting:['Connecting…','tag-amber'], online:['Synced · Online','tag-green'], offline:['Synced · Offline (will sync later)','tag-amber'], error:['Connection error','tag-red']};
+    const [txt,cls] = map[s]||map.off;
+    el.className = 'tag '+cls; el.textContent = txt;
+  }
+}
+async function connectFirebase(){
+  const cfgText = val('fb_config');
+  if(!cfgText){ toast('Paste your Firebase project config first'); return; }
+  let cfg;
+  try{ cfg = JSON.parse(cfgText); }catch(e){ toast('That does not look like valid JSON'); return; }
+  try{
+    setCloudStatus('connecting');
+    if(!fbApp){ fbApp = firebase.initializeApp(cfg); }
+    fbDb = firebase.firestore();
+    fbAuth = firebase.auth();
+    try{ fbDb.enablePersistence({synchronizeTabs:true}); }catch(e){ /* already enabled / unsupported browser — ok, still works online */ }
+    await fbAuth.signInAnonymously();
+    if(!cloudGroupId){
+      cloudGroupId = (DB.settings.groupName||'gfm').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'') + '-' + uid('g').slice(-6);
+      localStorage.setItem('gfm_cloud_groupid', cloudGroupId);
+    }
+    localStorage.setItem('gfm_firebase_config', JSON.stringify(cfg));
+    window.addEventListener('online', ()=> setCloudStatus('online'));
+    window.addEventListener('offline', ()=> setCloudStatus('offline'));
+    listenCloud();
+    toast('Connected to Firebase — cloud sync active');
+    renderSettings();
+  }catch(err){
+    console.error(err); setCloudStatus('error'); toast('Could not connect: '+(err.message||err));
+  }
+}
+function listenCloud(){
+  if(!fbDb || !cloudGroupId) return;
+  if(fbUnsub) fbUnsub();
+  const ref = fbDb.collection('gfm_groups').doc(cloudGroupId);
+  fbUnsub = ref.onSnapshot({includeMetadataChanges:true}, snap=>{
+    setCloudStatus(navigator.onLine ? (snap.metadata.fromCache ? 'offline' : 'online') : 'offline');
+    if(snap.exists && !snap.metadata.hasPendingWrites){
+      const remote = snap.data();
+      if(remote && remote.db){
+        suppressCloudPush = true;
+        DB = JSON.parse(remote.db);
+        localStorage.setItem('gfm_db_v1', JSON.stringify(DB));
+        suppressCloudPush = false;
+        if(document.getElementById('app') && document.getElementById('app').style.display!=='none'){
+          initNav(); showPage(currentPage||'dashboard');
+        } else {
+          document.getElementById('loginGroupName').textContent = DB.settings.groupName || 'Group Funds Manager';
+          refreshAuthScreenState();
+        }
+      }
+    } else if(!snap.exists){
+      ref.set({db: JSON.stringify(DB), updatedAt: firebase.firestore.FieldValue.serverTimestamp()});
+    }
+  }, err=>{ console.error(err); setCloudStatus('error'); });
+}
+function cloudPush(){
+  if(suppressCloudPush || !fbDb || !cloudGroupId) return;
+  fbDb.collection('gfm_groups').doc(cloudGroupId).set({
+    db: JSON.stringify(DB), updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  }).catch(()=>{ /* queued offline by Firestore SDK automatically */ });
+}
+function disconnectFirebase(){
+  if(fbUnsub) fbUnsub();
+  fbUnsub = null; fbDb = null; fbApp = null;
+  localStorage.removeItem('gfm_firebase_config');
+  setCloudStatus('off');
+  toast('Disconnected from cloud sync (data still saved locally)');
+  renderSettings();
+}
+function initCloudSyncOnBoot(){
+  const cfg = getFirebaseConfig();
+  if(!cfg) { setCloudStatus('off'); return; }
+  (async ()=>{
+    try{
+      setCloudStatus('connecting');
+      if(!fbApp) fbApp = firebase.initializeApp(cfg);
+      fbDb = firebase.firestore(); fbAuth = firebase.auth();
+      try{ fbDb.enablePersistence({synchronizeTabs:true}); }catch(e){}
+      await fbAuth.signInAnonymously();
+      listenCloud();
+    }catch(err){ console.error(err); setCloudStatus('error'); }
+  })();
+}
+
+function seedDemo(){
+  const m1={id:'m1',memberNo:'MB-001',name:'Amina Hassan',phone:'0722000001',email:'amina@example.com',dateJoined:'2025-01-15',status:'Active',emergencyContact:'Yusuf Hassan',emergencyPhone:'0722000011'};
+  const m2={id:'m2',memberNo:'MB-002',name:'John Mwangi',phone:'0722000002',email:'john@example.com',dateJoined:'2025-02-10',status:'Active',emergencyContact:'Mary Mwangi',emergencyPhone:'0722000012'};
+  const m3={id:'m3',memberNo:'MB-003',name:'Grace Wanjiru',phone:'0722000003',email:'grace@example.com',dateJoined:'2025-01-20',status:'Active',emergencyContact:'Peter Wanjiru',emergencyPhone:'0722000013'};
+  const m4={id:'m4',memberNo:'MB-004',name:'David Otieno',phone:'0722000004',email:'david@example.com',dateJoined:'2025-06-01',status:'Active',emergencyContact:'Susan Otieno',emergencyPhone:'0722000014'};
+  DB.members.push(m1,m2,m3,m4);
+  DB.users[2].memberId = 'm1';
+  ['2025-02','2025-03','2025-04','2025-05','2025-06','2025-07'].forEach((mo,i)=>{
+    DB.contributions.push({id:uid('con'),memberId:'m1',date:mo+'-05',amount:1000,method:'M-Pesa',reference:'MP'+(1000+i),status:'Full'});
+    DB.contributions.push({id:uid('con'),memberId:'m2',date:mo+'-06',amount:1000,method:'Cash',reference:'',status:'Full'});
+    DB.contributions.push({id:uid('con'),memberId:'m3',date:mo+'-07',amount:i===2?600:1000,method:'Bank',reference:'BK'+(2000+i),status:i===2?'Partial':'Full'});
+  });
+  DB.savings.push({id:uid('sav'),memberId:'m1',date:'2025-03-01',amount:5000,type:'voluntary',direction:'deposit'});
+  DB.savings.push({id:uid('sav'),memberId:'m2',date:'2025-03-15',amount:3000,type:'mandatory',direction:'deposit'});
+  DB.savings.push({id:uid('sav'),memberId:'m3',date:'2025-04-10',amount:8000,type:'voluntary',direction:'deposit'});
+  DB.penalties.push({id:uid('pen'),memberId:'m4',type:'Absent from Meeting',amount:100,reason:'Missed June meeting',dueDate:'2025-06-30',status:'Unpaid'});
+  DB.penalties.push({id:uid('pen'),memberId:'m2',type:'Late Contribution',amount:200,reason:'Paid after 5th',dueDate:'2025-05-31',status:'Paid',datePaid:'2025-06-02'});
+  DB.loans.push({id:uid('loan'),memberId:'m2',requestedAmount:6000,purpose:'School fees',dateApplied:'2025-04-01',status:'Active',approvedAmount:6000,approvalDate:'2025-04-05',interestRate:10,interestMethod:'reducing',period:6,dueDate:'2025-10-05',guarantors:[{memberId:'m1',amount:3000,released:false},{memberId:'m3',amount:3000,released:false}],repayments:[{date:'2025-05-05',amount:1050},{date:'2025-06-05',amount:1050}]});
+  DB.loans.push({id:uid('loan'),memberId:'m4',requestedAmount:2000,purpose:'Business stock',dateApplied:'2025-07-01',status:'Pending',guarantors:[],repayments:[]});
+  DB.incomeExpense.push({id:uid('ie'),type:'income',category:'Registration Fees',date:'2025-01-15',amount:500,description:'New member registration'});
+  DB.incomeExpense.push({id:uid('ie'),type:'expense',category:'Stationery',date:'2025-02-10',amount:350,description:'Ledger book and pens'});
+  DB.meetings.push({id:uid('mt'),date:'2025-06-28',agenda:'Mid-year review',resolutions:'Approved discussion on loan multiplier increase',minutes:'minutes-2025-06.pdf',attendance:[{memberId:'m1',present:true},{memberId:'m2',present:true},{memberId:'m3',present:true},{memberId:'m4',present:false}]});
+}
+
+function logAudit(action, oldV, newV){
+  DB.audit.unshift({id:uid('aud'), date:new Date().toISOString(), user: currentUser?currentUser.username:'system', action, old: oldV?JSON.stringify(oldV):'', new: newV?JSON.stringify(newV):''});
+  if(DB.audit.length>500) DB.audit.length = 500;
+}
+
+/* ---------------------- Helpers ---------------------- */
+function uid(prefix){ return prefix+'_'+Math.random().toString(36).slice(2,9); }
+function todayISO(){ return new Date().toISOString().slice(0,10); }
+function CURRENCY(){ return DB.settings.currency || 'KES'; }
+function fmt(n){ n = Number(n)||0; return CURRENCY()+' '+n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function val(id){ const e=document.getElementById(id); return e? e.value.trim() : ''; }
+function escapeHtml(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function cap(s){ return s? s[0].toUpperCase()+s.slice(1) : s; }
+function initials(name){ return (name||'').split(' ').filter(Boolean).slice(0,2).map(w=>w[0].toUpperCase()).join(''); }
+function truncate(s,n){ return s && s.length>n ? s.slice(0,n)+'…' : (s||''); }
+function memberName(id){ const m=DB.members.find(x=>x.id===id); return m? m.name : '—'; }
+function toast(msg){
+  const w = document.getElementById('toastWrap');
+  const d = document.createElement('div'); d.className='toast'; d.textContent=msg;
+  w.appendChild(d); setTimeout(()=>d.remove(), 3000);
+}
+function openModal(html){ document.getElementById('modalBox').innerHTML = html; document.getElementById('modalBackdrop').classList.add('active'); }
+function closeModal(){ document.getElementById('modalBackdrop').classList.remove('active'); }
+function canEdit(){ return currentUser && currentUser.role !== 'Member'; }
+function statusTag(s){ return s==='Active' ? `<span class="tag tag-green">Active</span>` : `<span class="tag tag-gray">Inactive</span>`; }
+function contribStatusTag(s){
+  if(s==='Full') return `<span class="tag tag-green">Full</span>`;
+  if(s==='Partial') return `<span class="tag tag-amber">Partial</span>`;
+  return `<span class="tag tag-red">Late</span>`;
+}
+function loanStatusTag(s){
+  const map = {Pending:'tag-amber', Active:'tag-blue', Rejected:'tag-red', Closed:'tag-green'};
+  return `<span class="tag ${map[s]||'tag-gray'}">${s}</span>`;
+}
+function simpleTable(headers, rows){
+  return `<div class="table-wrap"><table><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead>
+  <tbody>${rows.length? rows.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join('')}</tr>`).join('') : `<tr class="empty-row"><td colspan="${headers.length}">No records.</td></tr>`}</tbody></table></div>`;
+}
+function exportCSV(filename, headers, rows){
+  let csv = headers.map(h=>`"${String(h).replace(/"/g,'""')}"`).join(',') + '\n' +
+    rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], {type:'text/csv'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename; a.click();
+}
+function printPage(){ window.print(); }
+
+/* ---------------------- Auth UI: tabs, password show/hide, registration ---------------------- */
+function togglePass(id, btn){
+  const inp = document.getElementById(id);
+  const showing = inp.type === 'text';
+  inp.type = showing ? 'password' : 'text';
+  btn.innerHTML = showing ? '&#128065;' : '&#128584;';
+}
+function setAuthTab(tab){
+  document.getElementById('tabLoginBtn').classList.toggle('active', tab==='login');
+  document.getElementById('tabCreateBtn').classList.toggle('active', tab==='create');
+  document.getElementById('panelLogin').classList.toggle('active', tab==='login');
+  document.getElementById('panelCreate').classList.toggle('active', tab==='create');
+}
+function refreshAuthScreenState(){
+  const hasUsers = DB.users && DB.users.length > 0;
+  const tabs = document.getElementById('authTabs');
+  const hint = document.getElementById('loginHint');
+  if(hasUsers){
+    tabs.style.display = 'none';
+    setAuthTab('login');
+    hint.innerHTML = "Don't have an account? Ask your group's admin to create a login for you and share the username and password with you.";
+  } else {
+    tabs.style.display = 'flex';
+    setAuthTab('create');
+    hint.innerHTML = 'No group set up on this device yet. Use "Set Up a Group" to get started.';
+  }
+}
+function doRegister(){
+  if(DB.users && DB.users.length > 0){ toast('A group is already set up here — ask your admin for a login'); return; }
+  const groupName = val('regGroupName'), name = val('regName'), uname = val('regUser'), p1 = document.getElementById('regPass').value, p2 = document.getElementById('regPass2').value;
+  const errEl = document.getElementById('regError');
+  errEl.style.display = 'none';
+  if(!groupName){ errEl.textContent = 'Please enter your group\'s name.'; errEl.style.display='block'; return; }
+  if(!name || !uname || !p1){ errEl.textContent = 'Please fill in your name, username and password.'; errEl.style.display='block'; return; }
+  if(p1.length < 4){ errEl.textContent = 'Password should be at least 4 characters.'; errEl.style.display='block'; return; }
+  if(p1 !== p2){ errEl.textContent = 'Passwords do not match.'; errEl.style.display='block'; return; }
+  DB.settings.groupName = groupName;
+  const u = {id:uid('u'), name, username:uname, password:p1, role:'Super Admin', memberId:null, active:true};
+  DB.users.push(u);
+  logAudit('Founded group "'+groupName+'" and created Super Admin '+u.username, null, {username:u.username, role:u.role});
+  saveDB();
+  toast('Group created — sign in to get started');
+  document.getElementById('regGroupName').value=''; document.getElementById('regName').value=''; document.getElementById('regUser').value='';
+  document.getElementById('regPass').value=''; document.getElementById('regPass2').value='';
+  document.getElementById('loginGroupName').textContent = groupName;
+  refreshAuthScreenState();
+  document.getElementById('loginUser').value = uname;
+}
+
+/* ---------------------- Sidebar: collapse (desktop) & drawer (mobile) ---------------------- */
+function toggleSidebarCollapse(){
+  const shell = document.getElementById('shell');
+  const collapsed = shell.classList.toggle('sb-collapsed');
+  localStorage.setItem('gfm_sb_collapsed', collapsed ? '1':'0');
+}
+function toggleMobileSidebar(){
+  document.getElementById('shell').classList.toggle('sb-mobile-open');
+}
+function closeMobileSidebar(){
+  document.getElementById('shell').classList.remove('sb-mobile-open');
+}
+function restoreSidebarState(){
+  const shell = document.getElementById('shell');
+  if(localStorage.getItem('gfm_sb_collapsed')==='1') shell.classList.add('sb-collapsed');
+}
+
+/* ---------------------- Generic table sorting & filtering ---------------------- */
+function initTableEnhancer(){
+  const pagesEl = document.getElementById('pages');
+  if(!pagesEl) return;
+  const mo = new MutationObserver(()=>{ clearTimeout(window.__gfmTblTimer); window.__gfmTblTimer = setTimeout(enhanceAllTables, 40); });
+  mo.observe(pagesEl, {childList:true, subtree:true});
+}
+function enhanceAllTables(){
+  document.querySelectorAll('#pages table').forEach(t=>{ if(!t.dataset.enhanced) enhanceTable(t); });
+}
+function enhanceTable(table){
+  table.dataset.enhanced = '1';
+  const thead = table.querySelector('thead'), tbody = table.querySelector('tbody');
+  if(!thead || !tbody) return;
+  const dataRowCount = tbody.querySelectorAll('tr:not(.empty-row)').length;
+  if(dataRowCount > 1){
+    Array.from(thead.querySelectorAll('th')).forEach((th, idx)=>{
+      const label = th.textContent.trim();
+      if(!label || /^actions?$/i.test(label)) return;
+      th.style.cursor = 'pointer';
+      th.title = 'Click to sort';
+      th.dataset.dir = '';
+      const ind = document.createElement('span');
+      ind.className = 'sort-ind';
+      ind.style.cssText = 'opacity:.45;font-size:9px;margin-left:4px;';
+      ind.textContent = '⇅';
+      th.appendChild(ind);
+      th.addEventListener('click', ()=>sortTableBy(table, idx, th));
+    });
+  }
+  if(dataRowCount > 0){
+    const wrap = table.closest('.table-wrap');
+    const card = table.closest('.card');
+    if(wrap && card && !card.querySelector('.search-input') && !card.querySelector('.qf-input')){
+      const qf = document.createElement('input');
+      qf.placeholder = 'Filter this list…';
+      qf.className = 'qf-input';
+      qf.style.cssText = 'padding:7px 10px;border:1px solid var(--border);border-radius:7px;font-size:12.5px;margin-bottom:10px;width:230px;max-width:100%;display:block;';
+      qf.addEventListener('input', ()=>filterTable(table, qf.value));
+      wrap.parentNode.insertBefore(qf, wrap);
+    }
+  }
+}
+function cellText(tr, idx){
+  const cell = tr.children[idx];
+  return cell ? cell.textContent.trim() : '';
+}
+function compareCellVals(a, b){
+  const isDateA = /^\d{4}-\d{2}-\d{2}/.test(a), isDateB = /^\d{4}-\d{2}-\d{2}/.test(b);
+  if(isDateA && isDateB){
+    const da = Date.parse(a), db = Date.parse(b);
+    if(!isNaN(da) && !isNaN(db)) return da - db;
+  }
+  const cleanedA = a.replace(/[^0-9.\-]/g,''), cleanedB = b.replace(/[^0-9.\-]/g,'');
+  const numA = Number(cleanedA), numB = Number(cleanedB);
+  const looksNumA = cleanedA.length>0 && !isNaN(numA) && /^[^0-9]*-?[\d,]+(\.\d+)?[^0-9]*$/.test(a);
+  const looksNumB = cleanedB.length>0 && !isNaN(numB) && /^[^0-9]*-?[\d,]+(\.\d+)?[^0-9]*$/.test(b);
+  if(looksNumA && looksNumB) return numA - numB;
+  return a.localeCompare(b);
+}
+function sortTableBy(table, idx, th){
+  const tbody = table.querySelector('tbody');
+  let rows = Array.from(tbody.querySelectorAll('tr'));
+  const emptyRows = rows.filter(r=>r.classList.contains('empty-row'));
+  rows = rows.filter(r=>!r.classList.contains('empty-row'));
+  if(!rows.length) return;
+  const dir = th.dataset.dir === 'asc' ? 'desc' : 'asc';
+  table.querySelectorAll('th').forEach(h=>{ h.dataset.dir=''; const s=h.querySelector('.sort-ind'); if(s) s.textContent='⇅'; });
+  th.dataset.dir = dir;
+  const ind = th.querySelector('.sort-ind'); if(ind) ind.textContent = dir==='asc' ? '▲' : '▼';
+  rows.sort((ra,rb)=>{
+    const c = compareCellVals(cellText(ra,idx), cellText(rb,idx));
+    return dir==='asc' ? c : -c;
+  });
+  rows.forEach(r=>tbody.appendChild(r));
+  emptyRows.forEach(r=>tbody.appendChild(r));
+}
+function filterTable(table, q){
+  q = q.trim().toLowerCase();
+  const tbody = table.querySelector('tbody');
+  Array.from(tbody.querySelectorAll('tr')).forEach(tr=>{
+    if(tr.classList.contains('empty-row')) return;
+    tr.style.display = (!q || tr.textContent.toLowerCase().includes(q)) ? '' : 'none';
+  });
+}
+
+/* ---------------------- Branded PDF export ---------------------- */
+function exportPDF(title, headers, rows, filename){
+  if(!(window.jspdf && window.jspdf.jsPDF)){ toast('PDF engine still loading — please try again in a moment'); return; }
+  const { jsPDF } = window.jspdf;
+  const wide = headers.length > 6;
+  const doc = new jsPDF({orientation: wide ? 'landscape' : 'portrait', unit:'pt', format:'a4'});
+  const navy = [15,46,44], gold=[198,149,47], muted=[100,118,114];
+  const pageW = doc.internal.pageSize.getWidth();
+  doc.setFillColor(...navy); doc.rect(0,0,pageW,58,'F');
+  doc.setFillColor(...gold); doc.rect(0,58,pageW,3,'F');
+  doc.setFillColor(...gold); doc.roundedRect(28,13,32,32,7,7,'F');
+  doc.setTextColor(...navy); doc.setFont('helvetica','bold'); doc.setFontSize(15); doc.text('G', 44, 34, {align:'center'});
+  doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(13); doc.text(String(DB.settings.groupName||'Group Funds Manager'), 72, 26);
+  doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.text(String(title), 72, 42);
+  doc.setFontSize(8); doc.text('Generated '+new Date().toLocaleString(), pageW-28, 22, {align:'right'});
+  doc.text('GFM — Group Funds Manager', pageW-28, 34, {align:'right'});
+  doc.autoTable({
+    startY: 76,
+    head: [headers],
+    body: rows,
+    styles:{fontSize:9, cellPadding:6, textColor:[21,37,33], lineColor:[226,232,229], lineWidth:0.5},
+    headStyles:{fillColor:navy, textColor:255, fontStyle:'bold', fontSize:9},
+    alternateRowStyles:{fillColor:[247,249,248]},
+    margin:{left:28, right:28, top:76, bottom:44}
+  });
+  const totalPages = doc.internal.getNumberOfPages();
+  for(let i=1;i<=totalPages;i++){
+    doc.setPage(i);
+    const ph = doc.internal.pageSize.getHeight();
+    doc.setDrawColor(...gold); doc.setLineWidth(1); doc.line(28, ph-30, pageW-28, ph-30);
+    doc.setFontSize(8); doc.setTextColor(...muted);
+    doc.text('Powered by Omlin', 28, ph-16);
+    doc.text('Page '+i+' of '+totalPages, pageW-28, ph-16, {align:'right'});
+  }
+  doc.save(filename);
+}
+
+/* ---------------------- Calculations ---------------------- */
+function computeMemberSavings(id){
+  return DB.savings.filter(s=>s.memberId===id).reduce((s,x)=> s + (x.direction==='deposit'?Number(x.amount):-Number(x.amount)), 0);
+}
+function computeMemberContributionsPaid(id){
+  return DB.contributions.filter(c=>c.memberId===id).reduce((s,c)=>s+Number(c.amount), 0);
+}
+function monthsSince(dateStr){
+  if(!dateStr) return 0;
+  const start = new Date(dateStr); const now = new Date();
+  let months = (now.getFullYear()-start.getFullYear())*12 + (now.getMonth()-start.getMonth()) + 1;
+  return Math.max(months, 0);
+}
+function outstandingContribution(m){
+  const expected = DB.settings.contributionAmount * monthsSince(m.dateJoined);
+  const paid = computeMemberContributionsPaid(m.id);
+  return Math.max(expected - paid, 0);
+}
+function loanCalc(loan){
+  const P = Number(loan.approvedAmount || loan.requestedAmount) || 0;
+  const n = Number(loan.period) || 1;
+  const rate = Number(loan.interestRate) || 0;
+  let installment, totalPayable, totalInterest;
+  if(loan.interestMethod === 'flat'){
+    totalInterest = P * rate/100 * (n/12);
+    totalPayable = P + totalInterest;
+    installment = totalPayable / n;
+  } else {
+    const r = rate/100/12;
+    installment = r===0 ? P/n : P*r*Math.pow(1+r,n) / (Math.pow(1+r,n)-1);
+    totalPayable = installment * n;
+    totalInterest = totalPayable - P;
+  }
+  const paid = (loan.repayments||[]).reduce((s,r)=>s+Number(r.amount), 0);
+  const outstanding = Math.max(totalPayable - paid, 0);
+  return {installment, totalPayable, totalInterest, paid, outstanding};
+}
+function sumSavingsByType(type){
+  return DB.savings.filter(s=>s.type===type).reduce((s,x)=> s + (x.direction==='deposit'?Number(x.amount):-Number(x.amount)), 0);
+}
+function buildCashbook(){
+  let rows = [];
+  DB.contributions.forEach(c=>rows.push({date:c.date, desc:`Contribution — ${memberName(c.memberId)}`, income:Number(c.amount), expense:0, category:'Contributions'}));
+  DB.savings.forEach(s=>{
+    if(s.direction==='deposit') rows.push({date:s.date, desc:`Savings deposit — ${memberName(s.memberId)} (${s.type})`, income:Number(s.amount), expense:0, category:'Savings'});
+    else rows.push({date:s.date, desc:`Savings withdrawal — ${memberName(s.memberId)}`, income:0, expense:Number(s.amount), category:'Savings'});
+  });
+  DB.penalties.filter(p=>p.status==='Paid').forEach(p=>rows.push({date:p.datePaid||p.dueDate, desc:`Penalty paid — ${memberName(p.memberId)} (${p.type})`, income:Number(p.amount), expense:0, category:'Penalties'}));
+  DB.loans.forEach(l=>{
+    if(l.status==='Active' || l.status==='Closed'){
+      rows.push({date:l.approvalDate, desc:`Loan disbursed — ${memberName(l.memberId)}`, income:0, expense:Number(l.approvedAmount), category:'Loans'});
+      (l.repayments||[]).forEach(r=>rows.push({date:r.date, desc:`Loan repayment — ${memberName(l.memberId)}`, income:Number(r.amount), expense:0, category:'Loans'}));
+    }
+  });
+  DB.incomeExpense.forEach(e=>{
+    if(e.type==='income') rows.push({date:e.date, desc:`${e.category}${e.description?' — '+e.description:''}`, income:Number(e.amount), expense:0, category:e.category});
+    else rows.push({date:e.date, desc:`${e.category}${e.description?' — '+e.description:''}`, income:0, expense:Number(e.amount), category:e.category});
+  });
+  rows = rows.filter(r=>r.date).sort((a,b)=> new Date(a.date) - new Date(b.date));
+  let bal = 0;
+  rows.forEach(r=>{ bal += r.income - r.expense; r.balance = bal; });
+  return rows;
+}
+function computeTotals(){
+  const totalSavings = DB.members.reduce((s,m)=>s+computeMemberSavings(m.id), 0);
+  const activeLoans = DB.loans.filter(l=>l.status==='Active');
+  const outstandingLoanBalance = activeLoans.reduce((s,l)=>s+loanCalc(l).outstanding, 0);
+  const thisMonth = new Date().toISOString().slice(0,7);
+  const monthlyContrib = DB.contributions.filter(c=>c.date && c.date.slice(0,7)===thisMonth).reduce((s,c)=>s+Number(c.amount), 0);
+  const penaltiesCollected = DB.penalties.filter(p=>p.status==='Paid').reduce((s,p)=>s+Number(p.amount), 0);
+  const cashbook = buildCashbook();
+  const groupBalance = cashbook.length ? cashbook[cashbook.length-1].balance : 0;
+  return {totalSavings, activeLoansCount:activeLoans.length, outstandingLoanBalance, monthlyContrib, penaltiesCollected, groupBalance};
+}
+function computeUpcoming(){
+  let items = [];
+  const now = new Date();
+  const soon = new Date(); soon.setDate(soon.getDate()+30);
+  DB.loans.filter(l=>l.status==='Active').forEach(l=>{
+    const calc = loanCalc(l);
+    if(calc.outstanding > 0) items.push({type:'Loan Installment', member:memberName(l.memberId), due:l.dueDate||'—', amount:calc.installment});
+  });
+  DB.penalties.filter(p=>p.status==='Unpaid').forEach(p=>items.push({type:'Penalty', member:memberName(p.memberId), due:p.dueDate, amount:p.amount}));
+  const thisMonth = now.toISOString().slice(0,7);
+  DB.members.filter(m=>m.status==='Active').forEach(m=>{
+    const paidThisMonth = DB.contributions.some(c=>c.memberId===m.id && c.date.slice(0,7)===thisMonth);
+    if(!paidThisMonth) items.push({type:'Monthly Contribution', member:m.name, due:thisMonth+'-28', amount:DB.settings.contributionAmount});
+  });
+  return items.sort((a,b)=> new Date(a.due) - new Date(b.due));
+}
+function memberTransactionHistory(id){
+  let tx = [];
+  DB.contributions.filter(c=>c.memberId===id).forEach(c=>tx.push({date:c.date, type:'Contribution', desc:c.method, amount:c.amount}));
+  DB.savings.filter(s=>s.memberId===id).forEach(s=>tx.push({date:s.date, type:'Savings '+cap(s.direction), desc:cap(s.type), amount:s.amount}));
+  DB.penalties.filter(p=>p.memberId===id && p.status==='Paid').forEach(p=>tx.push({date:p.datePaid||p.dueDate, type:'Penalty Paid', desc:p.type, amount:p.amount}));
+  DB.loans.filter(l=>l.memberId===id).forEach(l=>{
+    if(l.status!=='Pending' && l.status!=='Rejected') tx.push({date:l.approvalDate, type:'Loan Disbursed', desc:l.purpose, amount:l.approvedAmount});
+    (l.repayments||[]).forEach(r=>tx.push({date:r.date, type:'Loan Repayment', desc:'Installment', amount:r.amount}));
+  });
+  return tx.filter(t=>t.date).sort((a,b)=> new Date(b.date) - new Date(a.date));
+}
+
+/* ---------------------- Dashboard ---------------------- */
+function renderDashboard(){
+  const el = document.getElementById('page-dashboard');
+  const t = computeTotals();
+  const isMember = currentUser.role === 'Member';
+  el.innerHTML = `
+  <div class="grid grid-4">
+    <div class="stat-card"><div class="stat-label">Total Group Balance</div><div class="stat-value">${fmt(t.groupBalance)}</div><div class="stat-sub">Cash position (cashbook)</div></div>
+    <div class="stat-card green"><div class="stat-label">Total Savings</div><div class="stat-value">${fmt(t.totalSavings)}</div><div class="stat-sub">Across all members</div></div>
+    <div class="stat-card blue"><div class="stat-label">Active Loans</div><div class="stat-value">${t.activeLoansCount}</div><div class="stat-sub">Currently disbursed</div></div>
+    <div class="stat-card warn"><div class="stat-label">Outstanding Loan Balance</div><div class="stat-value">${fmt(t.outstandingLoanBalance)}</div><div class="stat-sub">Yet to be repaid</div></div>
+  </div>
+  <div class="grid grid-4" style="margin-top:16px">
+    <div class="stat-card"><div class="stat-label">This Month's Contributions</div><div class="stat-value">${fmt(t.monthlyContrib)}</div></div>
+    <div class="stat-card"><div class="stat-label">Penalties Collected</div><div class="stat-value">${fmt(t.penaltiesCollected)}</div></div>
+    <div class="stat-card"><div class="stat-label">Number of Members</div><div class="stat-value">${DB.members.filter(m=>m.status==='Active').length}</div><div class="stat-sub">${DB.members.length} total registered</div></div>
+    <div class="stat-card ${DB.penalties.filter(p=>p.status==='Unpaid').length?'warn':'green'}"><div class="stat-label">Outstanding Penalties</div><div class="stat-value">${fmt(DB.penalties.filter(p=>p.status==='Unpaid').reduce((s,p)=>s+Number(p.amount),0))}</div></div>
+  </div>
+  ${isMember ? `<div class="form-note" style="margin-top:16px">This is a summary of the whole group. Head to <b>My Account</b> in the menu for your own savings, contributions, loans and transactions.</div>` : `
+  <div class="split" style="margin-top:18px">
+    <div class="card">
+      <div class="card-head"><h3>Recent Transactions</h3><span class="hint">Last 8 entries</span></div>
+      <div class="table-wrap"><table><thead><tr><th>Date</th><th>Description</th><th class="num">Income</th><th class="num">Expense</th><th class="num">Balance</th></tr></thead>
+      <tbody>${buildCashbook().slice(-8).reverse().map(r=>`<tr><td>${r.date}</td><td>${r.desc}</td><td class="num">${r.income?fmt(r.income):'—'}</td><td class="num">${r.expense?fmt(r.expense):'—'}</td><td class="num">${fmt(r.balance)}</td></tr>`).join('') || `<tr class="empty-row"><td colspan="5">No transactions yet.</td></tr>`}</tbody></table></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h3>Upcoming Due Dates</h3><span class="hint">Next reminders</span></div>
+      <div class="table-wrap"><table><thead><tr><th>Type</th><th>Member</th><th>Due</th><th class="num">Amount</th></tr></thead>
+      <tbody>${computeUpcoming().slice(0,6).map(u=>`<tr><td>${u.type}</td><td>${u.member}</td><td>${u.due}</td><td class="num">${fmt(u.amount)}</td></tr>`).join('') || `<tr class="empty-row"><td colspan="4">Nothing due soon.</td></tr>`}</tbody></table></div>
+    </div>
+  </div>`}`;
+}
+
+/* ---------------------- Members ---------------------- */
+function nextMemberNo(){ return 'MB-'+String(DB.members.length+1).padStart(3,'0'); }
+function renderMembers(){
+  const el = document.getElementById('page-members');
+  const q = (document.getElementById('memberSearch')?.value || '').toLowerCase();
+  const statusF = document.getElementById('memberStatusFilter')?.value || '';
+  let rows = DB.members.filter(m=>{
+    if(statusF && m.status!==statusF) return false;
+    if(q && !((m.name||'').toLowerCase().includes(q) || (m.memberNo||'').toLowerCase().includes(q) || (m.phone||'').includes(q))) return false;
+    return true;
+  });
+  el.innerHTML = `
+  <div class="card">
+    <div class="toolbar">
+      <input class="search-input" id="memberSearch" placeholder="Search name, ID or phone..." oninput="renderMembers()" value="${escapeHtml(q)}">
+      <select id="memberStatusFilter" onchange="renderMembers()">
+        <option value="">All statuses</option>
+        <option value="Active" ${statusF==='Active'?'selected':''}>Active</option>
+        <option value="Inactive" ${statusF==='Inactive'?'selected':''}>Inactive</option>
+      </select>
+      <span class="muted" style="margin-left:auto">${rows.length} member(s)</span>
+      <button class="btn btn-sm btn-gold" onclick="exportMembersPDF()">Download PDF</button>
+      ${canEdit()?`<button class="btn btn-primary" onclick="openMemberForm()">+ Register Member</button>`:''}
+    </div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>ID</th><th>Name</th><th>Phone</th><th>Email</th><th>Joined</th><th>Status</th><th class="num">Savings</th><th class="num">Outstanding Contrib.</th><th>Login</th><th>Actions</th></tr></thead>
+      <tbody>
+      ${rows.length? rows.map(m=>{
+        const u = DB.users.find(x=>x.memberId===m.id);
+        return `
+        <tr>
+          <td>${m.memberNo}</td>
+          <td><a style="cursor:pointer;font-weight:600;color:var(--navy)" onclick="viewMember('${m.id}')">${escapeHtml(m.name)}</a></td>
+          <td>${m.phone||''}</td>
+          <td>${m.email||''}</td>
+          <td>${m.dateJoined||''}</td>
+          <td>${statusTag(m.status)}</td>
+          <td class="num">${fmt(computeMemberSavings(m.id))}</td>
+          <td class="num">${fmt(outstandingContribution(m))}</td>
+          <td>${u ? `<span class="tag ${u.active===false?'tag-gray':'tag-green'}">${u.active===false?'Deactivated':'Active login'}</span>` : `<span class="tag tag-amber">No login</span>`}</td>
+          <td class="row-actions">
+            <button class="btn btn-sm" onclick="viewMember('${m.id}')">View</button>
+            ${canEdit()?`<button class="btn btn-sm" onclick="openMemberForm('${m.id}')">Edit</button>
+            <button class="btn btn-sm" onclick="${u?`manageMemberLogin('${m.id}')`:`createMemberLogin('${m.id}')`}">${u?'Manage Login':'Create Login'}</button>
+            <button class="btn btn-sm btn-danger" onclick="deleteMember('${m.id}')">Delete</button>`:''}
+          </td>
+        </tr>`;}).join(''): `<tr class="empty-row"><td colspan="10">No members found.</td></tr>`}
+      </tbody>
+    </table></div>
+  </div>`;
+}
+function createMemberLogin(memberId){
+  const m = DB.members.find(x=>x.id===memberId);
+  if(!m) return;
+  const suggested = (m.name||'').toLowerCase().replace(/[^a-z\s]/g,'').trim().split(/\s+/).slice(0,2).join('.') || 'member';
+  openModal(`<h3>Create Login</h3><div class="modal-sub">Set a username and password for <b>${escapeHtml(m.name)}</b>, then share these details with them.</div>
+  <div class="field"><label>Username</label><input id="ml_uname" value="${escapeHtml(suggested)}"></div>
+  <div class="field"><label>Password</label><div class="pass-wrap"><input id="ml_pass" type="password"><button type="button" class="pass-toggle" onclick="togglePass('ml_pass',this)">&#128065;</button></div></div>
+  <div class="login-error" id="ml_error" style="display:none"></div>
+  <div class="modal-actions"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveMemberLogin('${memberId}')">Create Login</button></div>`);
+}
+function saveMemberLogin(memberId){
+  const m = DB.members.find(x=>x.id===memberId);
+  const uname = val('ml_uname'), pass = document.getElementById('ml_pass').value;
+  const errEl = document.getElementById('ml_error');
+  if(!uname || !pass){ errEl.textContent = 'Username and password are required.'; errEl.style.display='block'; return; }
+  if(DB.users.some(u=>u.username.toLowerCase()===uname.toLowerCase())){ errEl.textContent = 'That username is already taken.'; errEl.style.display='block'; return; }
+  const u = {id:uid('u'), name:m.name, username:uname, password:pass, role:'Member', memberId:m.id, active:true};
+  DB.users.push(u);
+  logAudit('Created member login for '+m.name, null, {username:uname});
+  saveDB(); closeModal(); toast('Login created — share these details with '+m.name); renderMembers();
+}
+function manageMemberLogin(memberId){
+  const u = DB.users.find(x=>x.memberId===memberId);
+  if(!u) return;
+  openModal(`<h3>Manage Login</h3><div class="modal-sub">Username: <b>${escapeHtml(u.username)}</b> · Status: ${u.active===false?'Deactivated':'Active'}</div>
+  <div class="field"><label>New Password (leave blank to keep current)</label><div class="pass-wrap"><input id="ml_newpass" type="password"><button type="button" class="pass-toggle" onclick="togglePass('ml_newpass',this)">&#128065;</button></div></div>
+  <div class="modal-actions">
+    <button class="btn" onclick="closeModal()">Close</button>
+    <button class="btn ${u.active===false?'':'btn-danger'}" onclick="toggleUserActive('${u.id}');closeModal();renderMembers();">${u.active===false?'Activate Login':'Deactivate Login'}</button>
+    <button class="btn btn-primary" onclick="updateMemberLoginPassword('${u.id}')">Save Password</button>
+  </div>`);
+}
+function updateMemberLoginPassword(userId){
+  const np = val('ml_newpass');
+  if(!np){ toast('Enter a new password, or close this dialog to leave it unchanged'); return; }
+  const u = DB.users.find(x=>x.id===userId); u.password = np;
+  logAudit('Reset password for '+u.username, null, null); saveDB(); closeModal(); toast('Password updated'); renderMembers();
+}
+function exportMembersPDF(){
+  const q = (document.getElementById('memberSearch')?.value || '').toLowerCase();
+  const statusF = document.getElementById('memberStatusFilter')?.value || '';
+  const rows = DB.members.filter(m=>{
+    if(statusF && m.status!==statusF) return false;
+    if(q && !((m.name||'').toLowerCase().includes(q) || (m.memberNo||'').toLowerCase().includes(q) || (m.phone||'').includes(q))) return false;
+    return true;
+  }).map(m=>[m.memberNo, m.name, m.phone||'—', m.email||'—', m.dateJoined||'—', m.status, fmt(computeMemberSavings(m.id)), fmt(outstandingContribution(m))]);
+  exportPDF('Members Register', ['ID','Name','Phone','Email','Joined','Status','Savings','Outstanding Contrib.'], rows, 'members.pdf');
+}
+function openMemberForm(id){
+  const m = id? DB.members.find(x=>x.id===id) : null;
+  openModal(`
+    <h3>${m?'Edit Member':'Register Member'}</h3>
+    <div class="modal-sub">Member details and contact information</div>
+    <div class="field-row">
+      <div class="field"><label>Full Name</label><input id="f_name" value="${m?escapeHtml(m.name):''}"></div>
+      <div class="field"><label>Member No.</label><input id="f_no" value="${m?m.memberNo:nextMemberNo()}"></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Phone Number</label><input id="f_phone" value="${m?m.phone||'':''}"></div>
+      <div class="field"><label>Email</label><input id="f_email" value="${m?m.email||'':''}"></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Date Joined</label><input type="date" id="f_joined" value="${m?m.dateJoined:todayISO()}"></div>
+      <div class="field"><label>Status</label><select id="f_status"><option ${m&&m.status==='Active'?'selected':''}>Active</option><option ${m&&m.status==='Inactive'?'selected':''}>Inactive</option></select></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Emergency Contact Name</label><input id="f_ec" value="${m?m.emergencyContact||'':''}"></div>
+      <div class="field"><label>Emergency Contact Phone</label><input id="f_ecphone" value="${m?m.emergencyPhone||'':''}"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveMember(${m?`'${m.id}'`:'null'})">Save Member</button>
+    </div>
+  `);
+}
+function saveMember(id){
+  const data = {
+    name: val('f_name'), memberNo: val('f_no'), phone: val('f_phone'), email: val('f_email'),
+    dateJoined: val('f_joined'), status: val('f_status'), emergencyContact: val('f_ec'), emergencyPhone: val('f_ecphone')
+  };
+  if(!data.name){ toast('Name is required'); return; }
+  if(id){
+    const m = DB.members.find(x=>x.id===id); const old={...m}; Object.assign(m,data); logAudit('Edit member '+m.name, old, m);
+  } else {
+    const m = {id:uid('m'), ...data}; DB.members.push(m); logAudit('Register member '+m.name, null, m);
+  }
+  saveDB(); closeModal(); toast('Member saved'); renderMembers();
+}
+function deleteMember(id){
+  if(!confirm('Delete this member? This cannot be undone.')) return;
+  const m = DB.members.find(x=>x.id===id);
+  DB.members = DB.members.filter(x=>x.id!==id);
+  logAudit('Delete member '+(m?m.name:id), m, null);
+  saveDB(); toast('Member deleted'); renderMembers();
+}
+function viewMember(id){
+  currentProfileId = id; currentPage = 'memberProfile'; profileTab = 'overview';
+  document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active', p.id==='page-memberProfile'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  const m = DB.members.find(x=>x.id===id);
+  document.getElementById('pageTitle').textContent = m? m.name : 'Member Profile';
+  document.getElementById('pageCrumb').textContent = 'Member Profile · '+(m?m.memberNo:'');
+  renderMemberProfile();
+}
+function setProfileTab(t){ profileTab = t; renderMemberProfile(); }
+function renderMemberProfile(){
+  const m = DB.members.find(x=>x.id===currentProfileId);
+  const el = document.getElementById('page-memberProfile');
+  if(!m){ el.innerHTML = '<div class="empty-state"><div class="em-icon">&#128100;</div>Member not found.</div>'; return; }
+  const savings = computeMemberSavings(m.id);
+  const contribOutstanding = outstandingContribution(m);
+  const loans = DB.loans.filter(l=>l.memberId===m.id);
+  const activeLoans = loans.filter(l=>l.status==='Active');
+  const penalties = DB.penalties.filter(p=>p.memberId===m.id);
+  const unpaidPenalties = penalties.filter(p=>p.status==='Unpaid').reduce((s,p)=>s+Number(p.amount),0);
+  const divs = DB.dividends.flatMap(d=>d.distributions.filter(x=>x.memberId===m.id).map(x=>({...x, year:d.year, date:d.date})));
+
+  let body = '';
+  if(profileTab==='overview'){
+    body = `<div class="grid grid-4">
+      <div class="stat-card"><div class="stat-label">Savings Balance</div><div class="stat-value">${fmt(savings)}</div></div>
+      <div class="stat-card ${contribOutstanding>0?'warn':'green'}"><div class="stat-label">Contribution Outstanding</div><div class="stat-value">${fmt(contribOutstanding)}</div></div>
+      <div class="stat-card blue"><div class="stat-label">Active Loans</div><div class="stat-value">${activeLoans.length}</div></div>
+      <div class="stat-card ${unpaidPenalties>0?'warn':'green'}"><div class="stat-label">Unpaid Penalties</div><div class="stat-value">${fmt(unpaidPenalties)}</div></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h3>Member Details</h3>${canEdit()?`<button class="btn btn-sm" onclick="openMemberForm('${m.id}')">Edit Details</button>`:''}</div>
+      <div class="split">
+        <div>
+          <div class="kv"><span class="k">Member No.</span><span>${m.memberNo}</span></div>
+          <div class="kv"><span class="k">Phone</span><span>${m.phone||'—'}</span></div>
+          <div class="kv"><span class="k">Email</span><span>${m.email||'—'}</span></div>
+        </div>
+        <div>
+          <div class="kv"><span class="k">Date Joined</span><span>${m.dateJoined||'—'}</span></div>
+          <div class="kv"><span class="k">Status</span><span>${statusTag(m.status)}</span></div>
+          <div class="kv"><span class="k">Emergency Contact</span><span>${m.emergencyContact||'—'} ${m.emergencyPhone?('· '+m.emergencyPhone):''}</span></div>
+        </div>
+      </div>
+    </div>`;
+  } else if(profileTab==='contributions'){
+    const rows = DB.contributions.filter(c=>c.memberId===m.id).sort((a,b)=>new Date(b.date)-new Date(a.date));
+    body = `<div class="card">${simpleTable(['Date','Amount','Method','Reference','Status'], rows.map(c=>[c.date, fmt(c.amount), c.method, c.reference||'—', contribStatusTag(c.status)]))}</div>`;
+  } else if(profileTab==='savings'){
+    const rows = DB.savings.filter(s=>s.memberId===m.id).sort((a,b)=>new Date(b.date)-new Date(a.date));
+    body = `<div class="card">${simpleTable(['Date','Type','Direction','Amount'], rows.map(s=>[s.date, cap(s.type), cap(s.direction), fmt(s.amount)]))}</div>`;
+  } else if(profileTab==='loans'){
+    body = loans.length? loans.map(l=>{
+      const calc = loanCalc(l);
+      return `<div class="card">
+        <div class="card-head"><h3>Loan · ${fmt(l.approvedAmount||l.requestedAmount)}</h3>${loanStatusTag(l.status)}</div>
+        <div class="kv"><span class="k">Purpose</span><span>${l.purpose}</span></div>
+        <div class="kv"><span class="k">Applied</span><span>${l.dateApplied}</span></div>
+        ${l.status!=='Pending' && l.status!=='Rejected' ? `
+        <div class="kv"><span class="k">Interest Rate</span><span>${l.interestRate}% (${l.interestMethod})</span></div>
+        <div class="kv"><span class="k">Installment</span><span>${fmt(calc.installment)} / month</span></div>
+        <div class="kv"><span class="k">Outstanding</span><span>${fmt(calc.outstanding)}</span></div>` : ''}
+        <div style="margin-top:8px"><button class="btn btn-sm" onclick="openLoanDetail('${l.id}')">View Loan</button></div>
+      </div>`;
+    }).join('') : `<div class="empty-state">No loans on record.</div>`;
+  } else if(profileTab==='penalties'){
+    body = `<div class="card">${simpleTable(['Date Due','Type','Reason','Amount','Status'], penalties.map(p=>[p.dueDate, p.type, p.reason||'—', fmt(p.amount), p.status==='Paid'?'<span class="tag tag-green">Paid</span>':'<span class="tag tag-red">Unpaid</span>']))}</div>`;
+  } else if(profileTab==='dividends'){
+    body = `<div class="card">${simpleTable(['Year','Amount','Date'], divs.map(d=>[d.year, fmt(d.amount), d.date]))}</div>`;
+  } else if(profileTab==='transactions'){
+    const tx = memberTransactionHistory(m.id);
+    body = `<div class="card">${simpleTable(['Date','Type','Description','Amount'], tx.map(t=>[t.date, t.type, t.desc, fmt(t.amount)]))}</div>`;
+  }
+
+  el.innerHTML = `
+    <button class="btn btn-sm no-print" onclick="showPage('members')">&larr; Back to Members</button>
+    <div class="profile-header" style="margin-top:14px">
+      <div class="profile-avatar">${initials(m.name)}</div>
+      <div><div style="font-size:19px;font-weight:700">${escapeHtml(m.name)}</div><div class="muted">${m.memberNo} · ${statusTag(m.status)}</div></div>
+    </div>
+    <div class="pill-tabs no-print" style="margin-top:16px">
+      ${['overview','contributions','savings','loans','penalties','dividends','transactions'].map(t=>`<div class="pill-tab ${profileTab===t?'active':''}" onclick="setProfileTab('${t}')">${cap(t)}</div>`).join('')}
+    </div>
+    ${body}
+  `;
+}
+
+/* ---------------------- Contributions ---------------------- */
+function renderContributions(){
+  const el = document.getElementById('page-contributions');
+  const memberF = document.getElementById('contribMemberFilter')?.value || '';
+  const monthF = document.getElementById('contribMonthFilter')?.value || '';
+  let rows = DB.contributions.filter(c=>{
+    if(memberF && c.memberId!==memberF) return false;
+    if(monthF && c.date.slice(0,7)!==monthF) return false;
+    return true;
+  }).sort((a,b)=>new Date(b.date)-new Date(a.date));
+  el.innerHTML = `
+  <div class="grid grid-3">
+    <div class="stat-card"><div class="stat-label">Standard Monthly Amount</div><div class="stat-value">${fmt(DB.settings.contributionAmount)}</div>
+      ${canEdit()?`<div style="margin-top:10px"><button class="btn btn-sm" onclick="editStandardContribution()">Change Amount</button></div>`:''}
+    </div>
+    <div class="stat-card green"><div class="stat-label">Collected This Month</div><div class="stat-value">${fmt(DB.contributions.filter(c=>c.date.slice(0,7)===new Date().toISOString().slice(0,7)).reduce((s,c)=>s+Number(c.amount),0))}</div></div>
+    <div class="stat-card warn"><div class="stat-label">Total Outstanding (All Members)</div><div class="stat-value">${fmt(DB.members.reduce((s,m)=>s+outstandingContribution(m),0))}</div></div>
+  </div>
+  <div class="card">
+    <div class="toolbar">
+      <select id="contribMemberFilter" onchange="renderContributions()"><option value="">All members</option>${DB.members.map(m=>`<option value="${m.id}" ${memberF===m.id?'selected':''}>${m.name}</option>`).join('')}</select>
+      <input type="month" id="contribMonthFilter" value="${monthF}" onchange="renderContributions()">
+      <span class="muted" style="margin-left:auto">${rows.length} payment(s)</span>
+      <button class="btn btn-sm btn-gold" onclick="exportContributionsPDF()">Download PDF</button>
+      ${canEdit()?`<button class="btn btn-primary" onclick="openContributionForm()">+ Record Payment</button>`:''}
+    </div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Date</th><th>Member</th><th class="num">Amount</th><th>Method</th><th>Reference</th><th>Status</th>${canEdit()?'<th>Actions</th>':''}</tr></thead>
+      <tbody>${rows.length? rows.map(c=>`<tr><td>${c.date}</td><td>${memberName(c.memberId)}</td><td class="num">${fmt(c.amount)}</td><td>${c.method}</td><td>${c.reference||'—'}</td><td>${contribStatusTag(c.status)}</td>
+      ${canEdit()?`<td class="row-actions"><button class="btn btn-sm" onclick="openContributionForm('${c.id}')">Edit</button><button class="btn btn-sm btn-danger" onclick="deleteContribution('${c.id}')">Delete</button></td>`:''}</tr>`).join(''):`<tr class="empty-row"><td colspan="7">No contributions recorded.</td></tr>`}</tbody>
+    </table></div>
+  </div>
+  <div class="card">
+    <div class="card-head"><h3>Outstanding Contributions by Member</h3></div>
+    <div class="table-wrap"><table><thead><tr><th>Member</th><th class="num">Expected to Date</th><th class="num">Paid</th><th class="num">Outstanding</th></tr></thead>
+    <tbody>${DB.members.map(m=>{
+      const expected = DB.settings.contributionAmount * monthsSince(m.dateJoined);
+      const paid = computeMemberContributionsPaid(m.id);
+      const out = Math.max(expected-paid, 0);
+      return `<tr><td>${m.name}</td><td class="num">${fmt(expected)}</td><td class="num">${fmt(paid)}</td><td class="num" style="color:${out>0?'var(--red)':'var(--green)'};font-weight:700">${fmt(out)}</td></tr>`;
+    }).join('')}</tbody></table></div>
+  </div>`;
+}
+function exportContributionsPDF(){
+  const memberF = document.getElementById('contribMemberFilter')?.value || '';
+  const monthF = document.getElementById('contribMonthFilter')?.value || '';
+  const rows = DB.contributions.filter(c=>{
+    if(memberF && c.memberId!==memberF) return false;
+    if(monthF && c.date.slice(0,7)!==monthF) return false;
+    return true;
+  }).sort((a,b)=>new Date(b.date)-new Date(a.date)).map(c=>[c.date, memberName(c.memberId), fmt(c.amount), c.method, c.reference||'—', c.status]);
+  exportPDF('Contributions Report', ['Date','Member','Amount','Method','Reference','Status'], rows, 'contributions.pdf');
+}
+function editStandardContribution(){
+  openModal(`<h3>Standard Monthly Contribution</h3><div class="modal-sub">Applies to all members going forward</div>
+  <div class="field"><label>Amount (${CURRENCY()})</label><input id="f_amt" type="number" value="${DB.settings.contributionAmount}"></div>
+  <div class="modal-actions"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="DB.settings.contributionAmount=Number(val('f_amt'))||0;saveDB();closeModal();toast('Updated');renderContributions();">Save</button></div>`);
+}
+function openContributionForm(id){
+  const c = id? DB.contributions.find(x=>x.id===id) : null;
+  openModal(`<h3>${c?'Edit':'Record'} Contribution Payment</h3>
+  <div class="field"><label>Member</label><select id="f_member">${DB.members.map(m=>`<option value="${m.id}" ${c&&c.memberId===m.id?'selected':''}>${m.name}</option>`).join('')}</select></div>
+  <div class="field-row">
+    <div class="field"><label>Payment Date</label><input type="date" id="f_date" value="${c?c.date:todayISO()}"></div>
+    <div class="field"><label>Amount</label><input type="number" id="f_amount" value="${c?c.amount:DB.settings.contributionAmount}"></div>
+  </div>
+  <div class="field-row">
+    <div class="field"><label>Payment Method</label><select id="f_method"><option ${c&&c.method==='Cash'?'selected':''}>Cash</option><option ${c&&c.method==='M-Pesa'?'selected':''}>M-Pesa</option><option ${c&&c.method==='Bank'?'selected':''}>Bank</option></select></div>
+    <div class="field"><label>Reference Number</label><input id="f_ref" value="${c?c.reference||'':''}"></div>
+  </div>
+  <div class="modal-actions"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveContribution(${c?`'${c.id}'`:'null'})">Save Payment</button></div>`);
+}
+function saveContribution(id){
+  const amount = Number(val('f_amount'));
+  const status = amount >= DB.settings.contributionAmount ? 'Full' : (amount>0 ? 'Partial' : 'Late');
+  const data = {memberId:val('f_member'), date:val('f_date'), amount, method:val('f_method'), reference:val('f_ref'), status};
+  if(!data.date || !amount){ toast('Date and amount are required'); return; }
+  if(id){ const c=DB.contributions.find(x=>x.id===id); const old={...c}; Object.assign(c,data); logAudit('Edit contribution', old, c); }
+  else{ const c={id:uid('con'), ...data}; DB.contributions.push(c); logAudit('Record contribution', null, c); }
+  saveDB(); closeModal(); toast('Contribution saved'); renderContributions();
+}
+function deleteContribution(id){
+  if(!confirm('Delete this payment record?')) return;
+  const c = DB.contributions.find(x=>x.id===id);
+  DB.contributions = DB.contributions.filter(x=>x.id!==id);
+  logAudit('Delete contribution', c, null); saveDB(); toast('Deleted'); renderContributions();
+}
+
+/* ---------------------- Savings ---------------------- */
+function renderSavings(){
+  const el = document.getElementById('page-savings');
+  const memberF = document.getElementById('savMemberFilter')?.value || '';
+  let rows = DB.savings.filter(s=> !memberF || s.memberId===memberF).sort((a,b)=>new Date(b.date)-new Date(a.date));
+  const total = DB.members.reduce((s,m)=>s+computeMemberSavings(m.id), 0);
+  el.innerHTML = `
+  <div class="grid grid-3">
+    <div class="stat-card green"><div class="stat-label">Total Group Savings</div><div class="stat-value">${fmt(total)}</div></div>
+    <div class="stat-card"><div class="stat-label">Voluntary Savings</div><div class="stat-value">${fmt(sumSavingsByType('voluntary'))}</div></div>
+    <div class="stat-card"><div class="stat-label">Mandatory Savings</div><div class="stat-value">${fmt(sumSavingsByType('mandatory'))}</div></div>
+  </div>
+  <div class="card">
+    <div class="toolbar">
+      <select id="savMemberFilter" onchange="renderSavings()"><option value="">All members</option>${DB.members.map(m=>`<option value="${m.id}" ${memberF===m.id?'selected':''}>${m.name}</option>`).join('')}</select>
+      <span class="muted" style="margin-left:auto">Withdrawals ${DB.settings.allowWithdrawals?'allowed':'disabled'} (see Settings)</span>
+      <button class="btn btn-sm btn-gold" onclick="exportSavingsPDF()">Download PDF</button>
+      ${canEdit()?`<button class="btn btn-primary" onclick="openSavingsForm()">+ Record Savings</button>`:''}
+    </div>
+    <div class="table-wrap"><table><thead><tr><th>Date</th><th>Member</th><th>Type</th><th>Direction</th><th class="num">Amount</th>${canEdit()?'<th>Actions</th>':''}</tr></thead>
+    <tbody>${rows.length? rows.map(s=>`<tr><td>${s.date}</td><td>${memberName(s.memberId)}</td><td>${cap(s.type)}</td><td>${s.direction==='deposit'?'<span class="tag tag-green">Deposit</span>':'<span class="tag tag-red">Withdrawal</span>'}</td><td class="num">${fmt(s.amount)}</td>
+    ${canEdit()?`<td class="row-actions"><button class="btn btn-sm btn-danger" onclick="deleteSavings('${s.id}')">Delete</button></td>`:''}</tr>`).join(''):`<tr class="empty-row"><td colspan="6">No savings records.</td></tr>`}</tbody></table></div>
+  </div>
+  <div class="card">
+    <div class="card-head"><h3>Savings Balance per Member</h3></div>
+    <div class="table-wrap"><table><thead><tr><th>Member</th><th class="num">Balance</th></tr></thead><tbody>
+    ${DB.members.map(m=>`<tr><td>${m.name}</td><td class="num">${fmt(computeMemberSavings(m.id))}</td></tr>`).join('')}
+    </tbody></table></div>
+  </div>`;
+}
+function exportSavingsPDF(){
+  const memberF = document.getElementById('savMemberFilter')?.value || '';
+  const rows = DB.savings.filter(s=> !memberF || s.memberId===memberF).sort((a,b)=>new Date(b.date)-new Date(a.date))
+    .map(s=>[s.date, memberName(s.memberId), cap(s.type), cap(s.direction), fmt(s.amount)]);
+  exportPDF('Savings Report', ['Date','Member','Type','Direction','Amount'], rows, 'savings.pdf');
+}
+function openSavingsForm(){
+  openModal(`<h3>Record Savings</h3>
+  <div class="field"><label>Member</label><select id="f_member">${DB.members.map(m=>`<option value="${m.id}">${m.name}</option>`).join('')}</select></div>
+  <div class="field-row">
+    <div class="field"><label>Date</label><input type="date" id="f_date" value="${todayISO()}"></div>
+    <div class="field"><label>Amount</label><input type="number" id="f_amount"></div>
+  </div>
+  <div class="field-row">
+    <div class="field"><label>Savings Type</label><select id="f_type"><option value="voluntary">Voluntary</option><option value="mandatory">Mandatory</option></select></div>
+    <div class="field"><label>Direction</label><select id="f_dir"><option value="deposit">Deposit</option>${DB.settings.allowWithdrawals?'<option value="withdraw">Withdrawal</option>':''}</select></div>
+  </div>
+  ${!DB.settings.allowWithdrawals?`<div class="form-note">Withdrawals are currently disabled in Settings.</div>`:''}
+  <div class="modal-actions"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveSavings()">Save</button></div>`);
+}
+function saveSavings(){
+  const amount = Number(val('f_amount')); const memberId = val('f_member'); const direction = val('f_dir');
+  if(!amount || amount<=0){ toast('Enter a valid amount'); return; }
+  if(direction==='withdraw'){
+    const bal = computeMemberSavings(memberId);
+    if(amount>bal){ toast('Withdrawal exceeds savings balance'); return; }
+  }
+  const s = {id:uid('sav'), memberId, date:val('f_date'), amount, type:val('f_type'), direction};
+  DB.savings.push(s); logAudit('Record savings '+direction, null, s); saveDB(); closeModal(); toast('Savings recorded'); renderSavings();
+}
+function deleteSavings(id){
+  if(!confirm('Delete this record?')) return;
+  const s = DB.savings.find(x=>x.id===id);
+  DB.savings = DB.savings.filter(x=>x.id!==id);
+  logAudit('Delete savings', s, null); saveDB(); toast('Deleted'); renderSavings();
+}
+
+/* ---------------------- Penalties ---------------------- */
+function renderPenalties(){
+  const el = document.getElementById('page-penalties');
+  const statusF = document.getElementById('penStatusFilter')?.value || '';
+  let rows = DB.penalties.filter(p=> !statusF || p.status===statusF).sort((a,b)=>new Date(b.dueDate)-new Date(a.dueDate));
+  el.innerHTML = `
+  <div class="grid grid-3">
+    <div class="stat-card warn"><div class="stat-label">Outstanding Penalties</div><div class="stat-value">${fmt(DB.penalties.filter(p=>p.status==='Unpaid').reduce((s,p)=>s+Number(p.amount),0))}</div></div>
+    <div class="stat-card green"><div class="stat-label">Penalties Collected</div><div class="stat-value">${fmt(DB.penalties.filter(p=>p.status==='Paid').reduce((s,p)=>s+Number(p.amount),0))}</div></div>
+    <div class="stat-card"><div class="stat-label">Penalty Types Configured</div><div class="stat-value">${DB.settings.penaltyTypes.length}</div></div>
+  </div>
+  <div class="card">
+    <div class="toolbar">
+      <select id="penStatusFilter" onchange="renderPenalties()"><option value="">All statuses</option><option value="Unpaid" ${statusF==='Unpaid'?'selected':''}>Unpaid</option><option value="Paid" ${statusF==='Paid'?'selected':''}>Paid</option></select>
+      <span class="muted" style="margin-left:auto">${rows.length} record(s)</span>
+      <button class="btn btn-sm btn-gold" onclick="exportPenaltiesPDF()">Download PDF</button>
+      ${canEdit()?`<button class="btn" onclick="openPenaltyTypeForm()">Manage Types</button><button class="btn btn-primary" onclick="openPenaltyForm()">+ Record Penalty</button>`:''}
+    </div>
+    <div class="table-wrap"><table><thead><tr><th>Due Date</th><th>Member</th><th>Type</th><th>Reason</th><th class="num">Amount</th><th>Status</th>${canEdit()?'<th>Actions</th>':''}</tr></thead>
+    <tbody>${rows.length? rows.map(p=>`<tr><td>${p.dueDate}</td><td>${memberName(p.memberId)}</td><td>${p.type}</td><td>${p.reason||'—'}</td><td class="num">${fmt(p.amount)}</td><td>${p.status==='Paid'?'<span class="tag tag-green">Paid</span>':'<span class="tag tag-red">Unpaid</span>'}</td>
+    ${canEdit()?`<td class="row-actions">${p.status==='Unpaid'?`<button class="btn btn-sm btn-gold" onclick="markPenaltyPaid('${p.id}')">Mark Paid</button>`:''}<button class="btn btn-sm btn-danger" onclick="deletePenalty('${p.id}')">Delete</button></td>`:''}</tr>`).join(''):`<tr class="empty-row"><td colspan="7">No penalties recorded.</td></tr>`}</tbody></table></div>
+  </div>`;
+}
+function exportPenaltiesPDF(){
+  const statusF = document.getElementById('penStatusFilter')?.value || '';
+  const rows = DB.penalties.filter(p=> !statusF || p.status===statusF).sort((a,b)=>new Date(b.dueDate)-new Date(a.dueDate))
+    .map(p=>[p.dueDate, memberName(p.memberId), p.type, p.reason||'—', fmt(p.amount), p.status]);
+  exportPDF('Penalties Report', ['Due Date','Member','Type','Reason','Amount','Status'], rows, 'penalties.pdf');
+}
+function openPenaltyTypeForm(){
+  openModal(`<h3>Penalty Types</h3><div class="modal-sub">Configure custom fine categories and default amounts</div>
+  <div id="ptList">${DB.settings.penaltyTypes.map((t,i)=>`<div class="field-row" style="align-items:end"><div class="field"><label>Name</label><input value="${escapeHtml(t.name)}" onchange="DB.settings.penaltyTypes[${i}].name=this.value"></div><div class="field"><label>Amount</label><input type="number" value="${t.amount}" onchange="DB.settings.penaltyTypes[${i}].amount=Number(this.value)"></div></div>`).join('')}</div>
+  <button class="btn btn-sm" onclick="DB.settings.penaltyTypes.push({name:'New Type',amount:0});openPenaltyTypeForm();">+ Add Type</button>
+  <div class="modal-actions"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveDB();closeModal();toast('Penalty types updated');renderPenalties();">Save</button></div>`);
+}
+function openPenaltyForm(){
+  openModal(`<h3>Record Penalty</h3>
+  <div class="field"><label>Member</label><select id="f_member">${DB.members.map(m=>`<option value="${m.id}">${m.name}</option>`).join('')}</select></div>
+  <div class="field-row">
+    <div class="field"><label>Penalty Type</label><select id="f_type" onchange="autoFillPenaltyAmount()">${DB.settings.penaltyTypes.map(t=>`<option value="${t.name}" data-amt="${t.amount}">${t.name}</option>`).join('')}<option value="Other">Other</option></select></div>
+    <div class="field"><label>Amount</label><input type="number" id="f_amount" value="${DB.settings.penaltyTypes[0]?DB.settings.penaltyTypes[0].amount:0}"></div>
+  </div>
+  <div class="field"><label>Reason</label><input id="f_reason" placeholder="Optional details"></div>
+  <div class="field"><label>Due Date</label><input type="date" id="f_due" value="${todayISO()}"></div>
+  <div class="modal-actions"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="savePenalty()">Save</button></div>`);
+}
+function autoFillPenaltyAmount(){
+  const sel = document.getElementById('f_type'); const opt = sel.selectedOptions[0];
+  if(opt && opt.dataset.amt) document.getElementById('f_amount').value = opt.dataset.amt;
+}
+function savePenalty(){
+  const p = {id:uid('pen'), memberId:val('f_member'), type:val('f_type'), amount:Number(val('f_amount')), reason:val('f_reason'), dueDate:val('f_due'), status:'Unpaid'};
+  if(!p.amount){ toast('Enter a valid amount'); return; }
+  DB.penalties.push(p); logAudit('Record penalty', null, p); saveDB(); closeModal(); toast('Penalty recorded'); renderPenalties();
+}
+function markPenaltyPaid(id){
+  const p = DB.penalties.find(x=>x.id===id); const old={...p};
+  p.status='Paid'; p.datePaid=todayISO();
+  logAudit('Mark penalty paid', old, p); saveDB(); toast('Marked as paid'); renderPenalties();
+}
+function deletePenalty(id){
+  if(!confirm('Delete this penalty?')) return;
+  const p = DB.penalties.find(x=>x.id===id);
+  DB.penalties = DB.penalties.filter(x=>x.id!==id);
+  logAudit('Delete penalty', p, null); saveDB(); toast('Deleted'); renderPenalties();
+}
+
+/* ---------------------- Loans ---------------------- */
+function renderLoans(){
+  const el = document.getElementById('page-loans');
+  const statusF = document.getElementById('loanStatusFilter')?.value || '';
+  let rows = DB.loans.filter(l=> !statusF || l.status===statusF).sort((a,b)=>new Date(b.dateApplied)-new Date(a.dateApplied));
+  el.innerHTML = `
+  <div class="grid grid-4">
+    <div class="stat-card blue"><div class="stat-label">Active Loans</div><div class="stat-value">${DB.loans.filter(l=>l.status==='Active').length}</div></div>
+    <div class="stat-card warn"><div class="stat-label">Outstanding Balance</div><div class="stat-value">${fmt(DB.loans.filter(l=>l.status==='Active').reduce((s,l)=>s+loanCalc(l).outstanding,0))}</div></div>
+    <div class="stat-card green"><div class="stat-label">Total Disbursed</div><div class="stat-value">${fmt(DB.loans.filter(l=>l.status==='Active'||l.status==='Closed').reduce((s,l)=>s+Number(l.approvedAmount),0))}</div></div>
+    <div class="stat-card"><div class="stat-label">Pending Applications</div><div class="stat-value">${DB.loans.filter(l=>l.status==='Pending').length}</div></div>
+  </div>
+  <div class="card">
+    <div class="toolbar">
+      <select id="loanStatusFilter" onchange="renderLoans()">
+        <option value="">All statuses</option>
+        ${['Pending','Active','Rejected','Closed'].map(s=>`<option ${statusF===s?'selected':''}>${s}</option>`).join('')}
+      </select>
+      <span class="muted" style="margin-left:auto">${rows.length} loan(s)</span>
+      <button class="btn btn-sm btn-gold" onclick="exportLoansPDF()">Download PDF</button>
+      ${canEdit()?`<button class="btn btn-primary" onclick="openLoanApplyForm()">+ New Loan Application</button>`:''}
+    </div>
+    <div class="table-wrap"><table><thead><tr><th>Applied</th><th>Member</th><th class="num">Requested</th><th class="num">Approved</th><th>Status</th><th class="num">Outstanding</th><th>Due</th><th>Actions</th></tr></thead>
+    <tbody>${rows.length? rows.map(l=>{
+      const calc = loanCalc(l);
+      return `<tr><td>${l.dateApplied}</td><td>${memberName(l.memberId)}</td><td class="num">${fmt(l.requestedAmount)}</td><td class="num">${l.approvedAmount?fmt(l.approvedAmount):'—'}</td><td>${loanStatusTag(l.status)}</td><td class="num">${l.status==='Active'?fmt(calc.outstanding):'—'}</td><td>${l.dueDate||'—'}</td>
+      <td class="row-actions"><button class="btn btn-sm" onclick="openLoanDetail('${l.id}')">View</button></td></tr>`;
+    }).join(''):`<tr class="empty-row"><td colspan="8">No loans recorded.</td></tr>`}</tbody></table></div>
+  </div>`;
+}
+function exportLoansPDF(){
+  const statusF = document.getElementById('loanStatusFilter')?.value || '';
+  const rows = DB.loans.filter(l=> !statusF || l.status===statusF).sort((a,b)=>new Date(b.dateApplied)-new Date(a.dateApplied))
+    .map(l=>{ const calc = loanCalc(l); return [l.dateApplied, memberName(l.memberId), fmt(l.requestedAmount), l.approvedAmount?fmt(l.approvedAmount):'—', l.status, l.status==='Active'?fmt(calc.outstanding):'—', l.dueDate||'—']; });
+  exportPDF('Loans Report', ['Applied','Member','Requested','Approved','Status','Outstanding','Due'], rows, 'loans.pdf');
+}
+function openLoanApplyForm(){
+  openModal(`<h3>Loan Application</h3>
+  <div class="field"><label>Member</label><select id="f_member" onchange="showLoanEligibility()">${DB.members.map(m=>`<option value="${m.id}">${m.name}</option>`).join('')}</select></div>
+  <div id="eligNote" class="form-note"></div>
+  <div class="field-row">
+    <div class="field"><label>Requested Amount</label><input type="number" id="f_amount"></div>
+    <div class="field"><label>Date</label><input type="date" id="f_date" value="${todayISO()}"></div>
+  </div>
+  <div class="field"><label>Purpose</label><textarea id="f_purpose"></textarea></div>
+  <div class="modal-actions"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveLoanApplication()">Submit Application</button></div>`);
+  showLoanEligibility();
+}
+function showLoanEligibility(){
+  const id = val('f_member'); const m = DB.members.find(x=>x.id===id);
+  if(!m) return;
+  const savings = computeMemberSavings(m.id);
+  const max = savings * DB.settings.loanMultiplier;
+  document.getElementById('eligNote').textContent = `Eligible up to ${fmt(max)} (${DB.settings.loanMultiplier}x savings of ${fmt(savings)})`;
+}
+function saveLoanApplication(){
+  const l = {id:uid('loan'), memberId:val('f_member'), requestedAmount:Number(val('f_amount')), purpose:val('f_purpose'), dateApplied:val('f_date'), status:'Pending', repayments:[], guarantors:[]};
+  if(!l.requestedAmount){ toast('Enter requested amount'); return; }
+  DB.loans.push(l); logAudit('Loan application', null, l); saveDB(); closeModal(); toast('Application submitted'); renderLoans();
+}
+function openLoanDetail(id){
+  currentLoanId = id;
+  const l = DB.loans.find(x=>x.id===id);
+  const calc = loanCalc(l);
+  const m = DB.members.find(x=>x.id===l.memberId);
+  let body = `<h3>Loan — ${m?escapeHtml(m.name):''}</h3><div class="modal-sub">Applied ${l.dateApplied} · ${loanStatusTag(l.status)}</div>
+  <div class="kv"><span class="k">Purpose</span><span>${l.purpose}</span></div>
+  <div class="kv"><span class="k">Requested Amount</span><span>${fmt(l.requestedAmount)}</span></div>`;
+  if(l.status==='Pending'){
+    body += `
+    <div class="section-title">Approval</div>
+    <div class="field-row">
+      <div class="field"><label>Amount Approved</label><input type="number" id="f_approved" value="${l.requestedAmount}"></div>
+      <div class="field"><label>Interest Rate (annual %)</label><input type="number" id="f_rate" value="${DB.settings.loanInterestRate}"></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Interest Method</label><select id="f_method"><option value="flat" ${DB.settings.interestMethod==='flat'?'selected':''}>Flat Rate</option><option value="reducing" ${DB.settings.interestMethod==='reducing'?'selected':''}>Reducing Balance</option></select></div>
+      <div class="field"><label>Repayment Period (months)</label><input type="number" id="f_period" value="6"></div>
+    </div>
+    <div class="field"><label>Guarantors</label>
+      <div id="guarantorPicker">${DB.members.filter(x=>x.id!==l.memberId).map(x=>`<label class="checkbox-row" style="margin-bottom:4px"><input type="checkbox" value="${x.id}" class="guarantorChk"> ${x.name} <input type="number" placeholder="Amount" class="guarantorAmt" style="width:90px;margin-left:6px" disabled></label>`).join('')}</div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-danger" onclick="rejectLoan('${l.id}')">Reject</button>
+      <button class="btn" onclick="closeModal()">Close</button>
+      <button class="btn btn-primary" onclick="approveLoan('${l.id}')">Approve Loan</button>
+    </div>`;
+  } else if(l.status==='Active'){
+    body += `
+    <div class="grid grid-3" style="margin:14px 0">
+      <div class="stat-card"><div class="stat-label">Installment</div><div class="stat-value" style="font-size:16px">${fmt(calc.installment)}</div></div>
+      <div class="stat-card warn"><div class="stat-label">Outstanding</div><div class="stat-value" style="font-size:16px">${fmt(calc.outstanding)}</div></div>
+      <div class="stat-card green"><div class="stat-label">Total Interest</div><div class="stat-value" style="font-size:16px">${fmt(calc.totalInterest)}</div></div>
+    </div>
+    <div class="kv"><span class="k">Rate / Method</span><span>${l.interestRate}% · ${l.interestMethod}</span></div>
+    <div class="kv"><span class="k">Period</span><span>${l.period} months</span></div>
+    <div class="kv"><span class="k">Guarantors</span><span>${(l.guarantors||[]).map(g=>memberName(g.memberId)+' ('+fmt(g.amount)+')').join(', ')||'—'}</span></div>
+    <div class="section-title">Record Repayment</div>
+    <div class="field-row">
+      <div class="field"><label>Date</label><input type="date" id="f_rdate" value="${todayISO()}"></div>
+      <div class="field"><label>Amount</label><input type="number" id="f_ramount" value="${calc.installment.toFixed(2)}"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal()">Close</button>
+      <button class="btn" onclick="document.getElementById('f_ramount').value=(${calc.outstanding}).toFixed(2);">Use Full Payoff Amount</button>
+      <button class="btn btn-primary" onclick="recordRepayment('${l.id}')">Record Repayment</button>
+    </div>
+    <div class="section-title">Repayment History</div>
+    ${simpleTable(['Date','Amount'], (l.repayments||[]).map(r=>[r.date, fmt(r.amount)]))}
+    `;
+  } else {
+    body += `<div class="kv"><span class="k">Status</span><span>${loanStatusTag(l.status)}</span></div>${l.rejectReason?`<div class="kv"><span class="k">Reason</span><span>${l.rejectReason}</span></div>`:''}
+    <div class="modal-actions"><button class="btn" onclick="closeModal()">Close</button></div>`;
+  }
+  openModal(body);
+  if(l.status==='Pending'){
+    document.querySelectorAll('.guarantorChk').forEach(chk=>chk.addEventListener('change', e=>{ e.target.nextElementSibling.disabled = !e.target.checked; }));
+  }
+}
+function approveLoan(id){
+  const l = DB.loans.find(x=>x.id===id);
+  const approvedAmount = Number(val('f_approved'));
+  const period = Number(val('f_period'));
+  if(!approvedAmount || !period){ toast('Fill approved amount and period'); return; }
+  const guarantors = [];
+  document.querySelectorAll('.guarantorChk:checked').forEach(chk=>{
+    const amt = Number(chk.nextElementSibling.value) || 0;
+    guarantors.push({memberId:chk.value, amount:amt, released:false});
+  });
+  const old = {...l};
+  Object.assign(l, {
+    status:'Active', approvedAmount, approvalDate:todayISO(), interestRate:Number(val('f_rate')),
+    interestMethod:val('f_method'), period, guarantors
+  });
+  const due = new Date(); due.setMonth(due.getMonth()+period);
+  l.dueDate = due.toISOString().slice(0,10);
+  logAudit('Approve loan for '+memberName(l.memberId), old, l);
+  saveDB(); closeModal(); toast('Loan approved and disbursed'); renderLoans();
+}
+function rejectLoan(id){
+  const reason = prompt('Reason for rejection (optional):') || '';
+  const l = DB.loans.find(x=>x.id===id); const old = {...l};
+  l.status = 'Rejected'; l.rejectReason = reason;
+  logAudit('Reject loan', old, l); saveDB(); closeModal(); toast('Loan rejected'); renderLoans();
+}
+function recordRepayment(id){
+  const l = DB.loans.find(x=>x.id===id);
+  const amount = Number(val('f_ramount'));
+  if(!amount || amount<=0){ toast('Enter a valid amount'); return; }
+  l.repayments = l.repayments || [];
+  l.repayments.push({date:val('f_rdate'), amount});
+  const calc = loanCalc(l);
+  if(calc.outstanding <= 0.5){
+    l.status = 'Closed';
+    (l.guarantors||[]).forEach(g=>g.released=true);
+  }
+  logAudit('Loan repayment '+memberName(l.memberId), null, {amount});
+  saveDB(); closeModal(); toast('Repayment recorded'); renderLoans();
+}
+
+/* ---------------------- Guarantors ---------------------- */
+function renderGuarantors(){
+  const el = document.getElementById('page-guarantors');
+  let rows = [];
+  DB.loans.forEach(l=>{
+    (l.guarantors||[]).forEach(g=>{
+      rows.push({guarantor:memberName(g.memberId), borrower:memberName(l.memberId), amount:g.amount, status: g.released?'Released':(l.status==='Active'?'Active':'—')});
+    });
+  });
+  const exposure = {};
+  rows.filter(r=>r.status==='Active').forEach(r=>{ exposure[r.guarantor] = (exposure[r.guarantor]||0) + Number(r.amount); });
+  el.innerHTML = `
+  <div class="card">
+    <div class="card-head"><h3>Guarantor Exposure</h3></div>
+    <div class="table-wrap"><table><thead><tr><th>Member</th><th class="num">Total Guaranteed (Active)</th></tr></thead>
+    <tbody>${Object.keys(exposure).length? Object.entries(exposure).map(([n,a])=>`<tr><td>${n}</td><td class="num">${fmt(a)}</td></tr>`).join(''):`<tr class="empty-row"><td colspan="2">No active guarantees.</td></tr>`}</tbody></table></div>
+  </div>
+  <div class="card">
+    <div class="card-head"><h3>All Guarantor Commitments</h3><button class="btn btn-sm btn-gold no-print" onclick="exportGuarantorsPDF()">Download PDF</button></div>
+    <div class="table-wrap"><table><thead><tr><th>Guarantor</th><th>Borrower</th><th class="num">Amount</th><th>Status</th></tr></thead>
+    <tbody>${rows.length? rows.map(r=>`<tr><td>${r.guarantor}</td><td>${r.borrower}</td><td class="num">${fmt(r.amount)}</td><td><span class="tag ${r.status==='Released'?'tag-green':r.status==='Active'?'tag-blue':'tag-gray'}">${r.status}</span></td></tr>`).join(''):`<tr class="empty-row"><td colspan="4">No guarantors recorded.</td></tr>`}</tbody></table></div>
+    <div class="form-note">Guarantors are automatically released when the related loan is fully repaid.</div>
+  </div>`;
+}
+function exportGuarantorsPDF(){
+  const rows = [];
+  DB.loans.forEach(l=>{
+    (l.guarantors||[]).forEach(g=>{
+      rows.push([memberName(g.memberId), memberName(l.memberId), fmt(g.amount), g.released?'Released':(l.status==='Active'?'Active':'—')]);
+    });
+  });
+  exportPDF('Guarantor Commitments', ['Guarantor','Borrower','Amount','Status'], rows, 'guarantors.pdf');
+}
+
+/* ---------------------- Income & Expenses ---------------------- */
+function renderIncomeExpense(){
+  const el = document.getElementById('page-incomeexpense');
+  const typeF = document.getElementById('ieTypeFilter')?.value || '';
+  let rows = DB.incomeExpense.filter(e=> !typeF || e.type===typeF).sort((a,b)=>new Date(b.date)-new Date(a.date));
+  const totalIncome = DB.incomeExpense.filter(e=>e.type==='income').reduce((s,e)=>s+Number(e.amount),0);
+  const totalExpense = DB.incomeExpense.filter(e=>e.type==='expense').reduce((s,e)=>s+Number(e.amount),0);
+  el.innerHTML = `
+  <div class="grid grid-3">
+    <div class="stat-card green"><div class="stat-label">Other Income Recorded</div><div class="stat-value">${fmt(totalIncome)}</div></div>
+    <div class="stat-card warn"><div class="stat-label">Total Expenses</div><div class="stat-value">${fmt(totalExpense)}</div></div>
+    <div class="stat-card"><div class="stat-label">Net (Income − Expense)</div><div class="stat-value">${fmt(totalIncome-totalExpense)}</div></div>
+  </div>
+  <div class="card">
+    <div class="toolbar">
+      <select id="ieTypeFilter" onchange="renderIncomeExpense()"><option value="">All</option><option value="income" ${typeF==='income'?'selected':''}>Income</option><option value="expense" ${typeF==='expense'?'selected':''}>Expense</option></select>
+      <span class="muted" style="margin-left:auto">${rows.length} entries</span>
+      <button class="btn btn-sm btn-gold" onclick="exportIEPDF()">Download PDF</button>
+      ${canEdit()?`<button class="btn btn-primary" onclick="openIEForm()">+ Add Entry</button>`:''}
+    </div>
+    <div class="table-wrap"><table><thead><tr><th>Date</th><th>Type</th><th>Category</th><th>Description</th><th class="num">Amount</th>${canEdit()?'<th>Actions</th>':''}</tr></thead>
+    <tbody>${rows.length? rows.map(e=>`<tr><td>${e.date}</td><td>${e.type==='income'?'<span class="tag tag-green">Income</span>':'<span class="tag tag-red">Expense</span>'}</td><td>${e.category}</td><td>${e.description||'—'}</td><td class="num">${fmt(e.amount)}</td>
+    ${canEdit()?`<td class="row-actions"><button class="btn btn-sm btn-danger" onclick="deleteIE('${e.id}')">Delete</button></td>`:''}</tr>`).join(''):`<tr class="empty-row"><td colspan="6">No entries yet.</td></tr>`}</tbody></table></div>
+  </div>`;
+}
+function exportIEPDF(){
+  const typeF = document.getElementById('ieTypeFilter')?.value || '';
+  const rows = DB.incomeExpense.filter(e=> !typeF || e.type===typeF).sort((a,b)=>new Date(b.date)-new Date(a.date))
+    .map(e=>[e.date, cap(e.type), e.category, e.description||'—', fmt(e.amount)]);
+  exportPDF('Income & Expense Report', ['Date','Type','Category','Description','Amount'], rows, 'income-expense.pdf');
+}
+function openIEForm(){
+  openModal(`<h3>Add Income / Expense Entry</h3>
+  <div class="field"><label>Type</label><select id="f_type" onchange="refreshIECats()"><option value="income">Income</option><option value="expense">Expense</option></select></div>
+  <div class="field"><label>Category</label><select id="f_cat">${INCOME_CATS.map(c=>`<option>${c}</option>`).join('')}</select></div>
+  <div class="field-row"><div class="field"><label>Date</label><input type="date" id="f_date" value="${todayISO()}"></div><div class="field"><label>Amount</label><input type="number" id="f_amount"></div></div>
+  <div class="field"><label>Description</label><input id="f_desc"></div>
+  <div class="modal-actions"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveIE()">Save</button></div>`);
+}
+function refreshIECats(){
+  const t = val('f_type');
+  document.getElementById('f_cat').innerHTML = (t==='income'?INCOME_CATS:EXPENSE_CATS).map(c=>`<option>${c}</option>`).join('');
+}
+function saveIE(){
+  const e = {id:uid('ie'), type:val('f_type'), category:val('f_cat'), date:val('f_date'), amount:Number(val('f_amount')), description:val('f_desc')};
+  if(!e.amount){ toast('Enter amount'); return; }
+  DB.incomeExpense.push(e); logAudit('Add '+e.type+' entry', null, e); saveDB(); closeModal(); toast('Saved'); renderIncomeExpense();
+}
+function deleteIE(id){
+  if(!confirm('Delete this entry?')) return;
+  const e = DB.incomeExpense.find(x=>x.id===id);
+  DB.incomeExpense = DB.incomeExpense.filter(x=>x.id!==id);
+  logAudit('Delete IE entry', e, null); saveDB(); toast('Deleted'); renderIncomeExpense();
+}
+
+/* ---------------------- Cashbook ---------------------- */
+function renderCashbook(){
+  const el = document.getElementById('page-cashbook');
+  const rows = buildCashbook();
+  el.innerHTML = `
+  <div class="card">
+    <div class="toolbar">
+      <span class="muted">${rows.length} transactions · running balance shown</span>
+      <div style="margin-left:auto" class="row-actions">
+        <button class="btn btn-sm" onclick='exportCashbookCSV()'>Export Excel (CSV)</button>
+        <button class="btn btn-sm btn-gold" onclick="exportCashbookPDF()">Download PDF</button>
+        <button class="btn btn-sm" onclick="printPage()">Print</button>
+      </div>
+    </div>
+    <div class="table-wrap"><table><thead><tr><th>Date</th><th>Description</th><th>Category</th><th class="num">Income</th><th class="num">Expense</th><th class="num">Balance</th></tr></thead>
+    <tbody>${rows.length? rows.map(r=>`<tr><td>${r.date}</td><td>${r.desc}</td><td>${r.category}</td><td class="num">${r.income?fmt(r.income):'—'}</td><td class="num">${r.expense?fmt(r.expense):'—'}</td><td class="num" style="font-weight:700">${fmt(r.balance)}</td></tr>`).join(''):`<tr class="empty-row"><td colspan="6">No transactions yet.</td></tr>`}</tbody></table></div>
+  </div>`;
+}
+function exportCashbookCSV(){
+  const rows = buildCashbook();
+  exportCSV('cashbook.csv', ['Date','Description','Category','Income','Expense','Balance'], rows.map(r=>[r.date,r.desc,r.category,r.income,r.expense,r.balance]));
+}
+function exportCashbookPDF(){
+  const rows = buildCashbook().map(r=>[r.date, r.desc, r.category, r.income?fmt(r.income):'—', r.expense?fmt(r.expense):'—', fmt(r.balance)]);
+  exportPDF('Cashbook', ['Date','Description','Category','Income','Expense','Balance'], rows, 'cashbook.pdf');
+}
+
+/* ---------------------- Reports ---------------------- */
+function setReportTab(t){ reportTab = t; renderReports(); }
+function getReportData(){
+  let headers=[], rows=[], title='';
+  if(reportTab==='contributions'){
+    title='Monthly Contributions Report'; headers=['Date','Member','Amount','Method','Status'];
+    rows = DB.contributions.map(c=>[c.date, memberName(c.memberId), fmt(c.amount), c.method, c.status]);
+  } else if(reportTab==='savings'){
+    title='Savings Report'; headers=['Member','Balance'];
+    rows = DB.members.map(m=>[m.name, fmt(computeMemberSavings(m.id))]);
+  } else if(reportTab==='loans'){
+    title='Loan Report'; headers=['Member','Approved','Status','Outstanding','Due Date'];
+    rows = DB.loans.map(l=>[memberName(l.memberId), l.approvedAmount?fmt(l.approvedAmount):'—', l.status, l.status==='Active'?fmt(loanCalc(l).outstanding):'—', l.dueDate||'—']);
+  } else if(reportTab==='penalties'){
+    title='Penalties Report'; headers=['Member','Type','Amount','Status','Due Date'];
+    rows = DB.penalties.map(p=>[memberName(p.memberId), p.type, fmt(p.amount), p.status, p.dueDate]);
+  } else if(reportTab==='interest'){
+    title='Interest Earned'; headers=['Member','Loan Amount','Total Interest','Method'];
+    rows = DB.loans.filter(l=>l.status==='Active'||l.status==='Closed').map(l=>[memberName(l.memberId), fmt(l.approvedAmount), fmt(loanCalc(l).totalInterest), l.interestMethod]);
+  } else if(reportTab==='incomeexpense'){
+    title='Income & Expense Report'; headers=['Date','Type','Category','Description','Amount'];
+    rows = DB.incomeExpense.map(e=>[e.date, e.type, e.category, e.description||'—', fmt(e.amount)]);
+  } else if(reportTab==='cashbook'){
+    title='Cashbook'; headers=['Date','Description','Category','Income','Expense','Balance'];
+    rows = buildCashbook().map(r=>[r.date,r.desc,r.category, r.income?fmt(r.income):'—', r.expense?fmt(r.expense):'—', fmt(r.balance)]);
+  } else if(reportTab==='defaulters'){
+    title='Defaulters Report (Outstanding Contributions)'; headers=['Member','Outstanding'];
+    rows = DB.members.filter(m=>outstandingContribution(m)>0).map(m=>[m.name, fmt(outstandingContribution(m))]);
+  } else if(reportTab==='arrears'){
+    title='Loan Arrears'; headers=['Member','Outstanding','Due Date'];
+    rows = DB.loans.filter(l=>l.status==='Active' && l.dueDate && new Date(l.dueDate)<new Date()).map(l=>[memberName(l.memberId), fmt(loanCalc(l).outstanding), l.dueDate]);
+  } else if(reportTab==='outstandingpenalties'){
+    title='Outstanding Penalties'; headers=['Member','Type','Amount','Due Date'];
+    rows = DB.penalties.filter(p=>p.status==='Unpaid').map(p=>[memberName(p.memberId), p.type, fmt(p.amount), p.dueDate]);
+  } else if(reportTab==='annual'){
+    title='Annual Financial Summary';
+    const cb = buildCashbook();
+    const income = cb.reduce((s,r)=>s+r.income,0), expense = cb.reduce((s,r)=>s+r.expense,0);
+    headers=['Metric','Value'];
+    rows=[['Total Income',fmt(income)],['Total Expenses',fmt(expense)],['Net Profit',fmt(income-expense)],
+      ['Total Savings',fmt(DB.members.reduce((s,m)=>s+computeMemberSavings(m.id),0))],
+      ['Outstanding Loans',fmt(DB.loans.filter(l=>l.status==='Active').reduce((s,l)=>s+loanCalc(l).outstanding,0))],
+      ['Closing Cash Balance', fmt(cb.length?cb[cb.length-1].balance:0)]];
+  }
+  return {headers, rows, title};
+}
+function renderReports(){
+  const el = document.getElementById('page-reports');
+  const tabs = [
+    ['contributions','Contributions'],['savings','Savings'],['loans','Loans'],['penalties','Penalties'],
+    ['interest','Interest Earned'],['incomeexpense','Income & Expense'],['cashbook','Cashbook'],
+    ['defaulters','Defaulters'],['arrears','Loan Arrears'],['outstandingpenalties','Outstanding Penalties'],['annual','Annual Summary']
+  ];
+  const {headers, rows, title} = getReportData();
+  el.innerHTML = `
+  <div class="card no-print" style="padding-bottom:14px">
+    <label style="display:block;font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.03em">Select Report</label>
+    <select id="reportSelect" onchange="setReportTab(this.value)" style="max-width:340px">
+      ${tabs.map(([k,l])=>`<option value="${k}" ${reportTab===k?'selected':''}>${l}</option>`).join('')}
+    </select>
+  </div>
+  <div class="card">
+    <div class="card-head"><h3>${title}</h3>
+      <div class="row-actions no-print">
+        <button class="btn btn-sm" onclick="exportCurrentReport()">Export Excel (CSV)</button>
+        <button class="btn btn-sm btn-gold" onclick="exportCurrentReportPDF()">Download PDF</button>
+        <button class="btn btn-sm" onclick="printPage()">Print</button>
+      </div>
+    </div>
+    <div class="table-wrap"><table><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead>
+    <tbody>${rows.length? rows.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join('')}</tr>`).join(''):`<tr class="empty-row"><td colspan="${headers.length}">No data for this report.</td></tr>`}</tbody></table></div>
+  </div>`;
+}
+function exportCurrentReport(){
+  const {headers, rows} = getReportData();
+  exportCSV(reportTab+'.csv', headers, rows);
+}
+function exportCurrentReportPDF(){
+  const {headers, rows, title} = getReportData();
+  exportPDF(title, headers, rows, reportTab+'-report.pdf');
+}
+
+/* ---------------------- Member Statements ---------------------- */
+function renderStatements(){
+  const el = document.getElementById('page-statements');
+  const isM = currentUser.role === 'Member';
+  const selId = isM ? (currentUser.memberId || (DB.members[0]&&DB.members[0].id)) : (document.getElementById('stMember')?.value || (DB.members[0]&&DB.members[0].id));
+  const m = DB.members.find(x=>x.id===selId);
+  el.innerHTML = `
+  <div class="card no-print">
+    <div class="toolbar">
+      ${isM?`<span class="muted">Statement for ${m?escapeHtml(m.name):'—'}</span>`:`<select id="stMember" onchange="renderStatements()">${DB.members.map(x=>`<option value="${x.id}" ${x.id===selId?'selected':''}>${x.name}</option>`).join('')}</select>`}
+      <div style="margin-left:auto" class="row-actions">
+        <button class="btn btn-sm btn-gold" onclick="exportStatementPDF('${selId||''}')">Download PDF</button>
+        <button class="btn btn-sm" onclick="printPage()">Print</button>
+      </div>
+    </div>
+  </div>
+  ${m ? renderMemberStatementBody(m) : '<div class="empty-state">No members registered yet.</div>'}
+  `;
+}
+function renderMemberStatementBody(m){
+  const savings = computeMemberSavings(m.id);
+  const contribPaid = computeMemberContributionsPaid(m.id);
+  const contribOutstanding = outstandingContribution(m);
+  const loans = DB.loans.filter(l=>l.memberId===m.id);
+  const penaltiesUnpaid = DB.penalties.filter(p=>p.memberId===m.id && p.status==='Unpaid').reduce((s,p)=>s+Number(p.amount),0);
+  const tx = memberTransactionHistory(m.id);
+  const myUpcoming = computeUpcoming().filter(u=>u.member===m.name);
+  return `
+  <div class="grid grid-4">
+    <div class="stat-card green"><div class="stat-label">Savings Balance</div><div class="stat-value">${fmt(savings)}</div></div>
+    <div class="stat-card"><div class="stat-label">Contributions Paid</div><div class="stat-value">${fmt(contribPaid)}</div></div>
+    <div class="stat-card warn"><div class="stat-label">Contribution Outstanding</div><div class="stat-value">${fmt(contribOutstanding)}</div></div>
+    <div class="stat-card ${penaltiesUnpaid>0?'warn':'green'}"><div class="stat-label">Unpaid Penalties</div><div class="stat-value">${fmt(penaltiesUnpaid)}</div></div>
+  </div>
+  <div class="card"><div class="card-head"><h3>My Upcoming Dues</h3></div>${simpleTable(['Type','Due Date','Amount'], myUpcoming.map(u=>[u.type,u.due,fmt(u.amount)]))}</div>
+  <div class="card"><div class="card-head"><h3>My Loans</h3></div>${simpleTable(['Purpose','Approved','Status','Outstanding'], loans.map(l=>[l.purpose, l.approvedAmount?fmt(l.approvedAmount):'—', l.status, l.status==='Active'?fmt(loanCalc(l).outstanding):'—']))}</div>
+  <div class="card"><div class="card-head"><h3>My Full Transaction History</h3></div>${simpleTable(['Date','Type','Description','Amount'], tx.map(t=>[t.date,t.type,t.desc,fmt(t.amount)]))}</div>
+  `;
+}
+
+function exportStatementPDF(memberId){
+  const m = DB.members.find(x=>x.id===memberId);
+  if(!m){ toast('Select a member first'); return; }
+  const savings = computeMemberSavings(m.id);
+  const contribPaid = computeMemberContributionsPaid(m.id);
+  const contribOutstanding = outstandingContribution(m);
+  const penaltiesUnpaid = DB.penalties.filter(p=>p.memberId===m.id && p.status==='Unpaid').reduce((s,p)=>s+Number(p.amount),0);
+  const tx = memberTransactionHistory(m.id);
+  const summary = [
+    ['Savings Balance', fmt(savings)], ['Contributions Paid', fmt(contribPaid)],
+    ['Contribution Outstanding', fmt(contribOutstanding)], ['Unpaid Penalties', fmt(penaltiesUnpaid)]
+  ];
+  exportPDF('Member Statement — '+m.name, ['Metric','Value'], summary, 'statement-summary-'+(m.memberNo||m.id)+'.pdf');
+  const rows = tx.map(t=>[t.date, t.type, t.desc, fmt(t.amount)]);
+  exportPDF('Transaction History — '+m.name, ['Date','Type','Description','Amount'], rows, 'statement-transactions-'+(m.memberNo||m.id)+'.pdf');
+}
+
+/* ---------------------- Notifications ---------------------- */
+function notifChannels(){
+  let c=[]; if(DB.settings.notifySMS)c.push('SMS'); if(DB.settings.notifyWA)c.push('WhatsApp'); if(DB.settings.notifyEmail)c.push('Email');
+  return c.length? c.join(', ') : '—';
+}
+function renderNotifications(){
+  const el = document.getElementById('page-notifications');
+  const items = computeUpcoming();
+  el.innerHTML = `
+  <div class="card">
+    <div class="card-head"><h3>Automatic Reminders</h3><span class="hint no-print">Simulated — no real messages are sent</span><button class="btn btn-sm btn-gold no-print" onclick="exportNotificationsPDF()">Download PDF</button></div>
+    <div class="table-wrap"><table><thead><tr><th>Type</th><th>Member</th><th>Due</th><th class="num">Amount</th><th>Channel</th></tr></thead>
+    <tbody>${items.length? items.map(i=>`<tr><td>${i.type}</td><td>${i.member}</td><td>${i.due}</td><td class="num">${fmt(i.amount)}</td><td>${notifChannels()}</td></tr>`).join(''):`<tr class="empty-row"><td colspan="5">No reminders due.</td></tr>`}</tbody></table></div>
+  </div>
+  ${canEdit()?`<div class="card">
+    <div class="card-head"><h3>Delivery Channels</h3></div>
+    <div class="checkbox-row"><input type="checkbox" id="chSMS" ${DB.settings.notifySMS?'checked':''} onchange="DB.settings.notifySMS=this.checked;saveDB()"> <label for="chSMS" style="margin:0">SMS</label></div>
+    <div class="checkbox-row" style="margin-top:8px"><input type="checkbox" id="chWA" ${DB.settings.notifyWA?'checked':''} onchange="DB.settings.notifyWA=this.checked;saveDB()"> <label for="chWA" style="margin:0">WhatsApp</label></div>
+    <div class="checkbox-row" style="margin-top:8px"><input type="checkbox" id="chEmail" ${DB.settings.notifyEmail?'checked':''} onchange="DB.settings.notifyEmail=this.checked;saveDB()"> <label for="chEmail" style="margin:0">Email</label></div>
+    <div class="form-note" style="margin-top:10px">This demo does not send real messages — channels are recorded as preferences only.</div>
+  </div>`:''}`;
+}
+function exportNotificationsPDF(){
+  const items = computeUpcoming();
+  const rows = items.map(i=>[i.type, i.member, i.due, fmt(i.amount), notifChannels()]);
+  exportPDF('Upcoming Reminders', ['Type','Member','Due','Amount','Channel'], rows, 'notifications.pdf');
+}
+
+/* ---------------------- Meetings ---------------------- */
+function renderMeetings(){
+  const el = document.getElementById('page-meetings');
+  const rows = [...DB.meetings].sort((a,b)=>new Date(b.date)-new Date(a.date));
+  el.innerHTML = `
+  <div class="card">
+    <div class="toolbar"><span class="muted">${rows.length} meeting(s)</span><button class="btn btn-sm btn-gold" style="margin-left:auto" onclick="exportMeetingsPDF()">Download PDF</button>${canEdit()?`<button class="btn btn-primary" onclick="openMeetingForm()">+ Schedule Meeting</button>`:''}</div>
+    <div class="table-wrap"><table><thead><tr><th>Date</th><th>Agenda</th><th>Attendance</th><th>Actions</th></tr></thead>
+    <tbody>${rows.length? rows.map(mt=>`<tr><td>${mt.date}</td><td>${mt.agenda||'—'}</td><td>${(mt.attendance||[]).filter(a=>a.present).length}/${DB.members.length}</td><td class="row-actions"><button class="btn btn-sm" onclick="openMeetingDetail('${mt.id}')">View / Attendance</button></td></tr>`).join(''):`<tr class="empty-row"><td colspan="4">No meetings scheduled.</td></tr>`}</tbody></table></div>
+  </div>`;
+}
+function exportMeetingsPDF(){
+  const rows = [...DB.meetings].sort((a,b)=>new Date(b.date)-new Date(a.date))
+    .map(mt=>[mt.date, mt.agenda||'—', (mt.attendance||[]).filter(a=>a.present).length+'/'+DB.members.length]);
+  exportPDF('Meetings Register', ['Date','Agenda','Attendance'], rows, 'meetings.pdf');
+}
+function openMeetingForm(){
+  openModal(`<h3>Schedule Meeting</h3>
+  <div class="field-row"><div class="field"><label>Date</label><input type="date" id="f_date" value="${todayISO()}"></div><div class="field"><label>Agenda</label><input id="f_agenda"></div></div>
+  <div class="field"><label>Resolutions</label><textarea id="f_res" placeholder="Key resolutions"></textarea></div>
+  <div class="field"><label>Minutes (file name / notes)</label><input id="f_minutes" placeholder="e.g. minutes-2026-07.pdf or paste notes"></div>
+  <div class="modal-actions"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveMeeting()">Save</button></div>`);
+}
+function saveMeeting(){
+  const mt = {id:uid('mt'), date:val('f_date'), agenda:val('f_agenda'), resolutions:val('f_res'), minutes:val('f_minutes'), attendance: DB.members.map(m=>({memberId:m.id, present:false}))};
+  DB.meetings.push(mt); logAudit('Schedule meeting', null, mt); saveDB(); closeModal(); toast('Meeting scheduled'); renderMeetings();
+}
+function openMeetingDetail(id){
+  const mt = DB.meetings.find(x=>x.id===id);
+  openModal(`<h3>${mt.agenda||'Meeting'}</h3><div class="modal-sub">${mt.date}</div>
+  <div class="kv"><span class="k">Resolutions</span><span>${mt.resolutions||'—'}</span></div>
+  <div class="kv"><span class="k">Minutes</span><span>${mt.minutes||'—'}</span></div>
+  <div class="section-title">Attendance Register</div>
+  <div style="max-height:220px;overflow-y:auto">
+  ${DB.members.map(m=>{
+    const a = (mt.attendance||[]).find(x=>x.memberId===m.id) || {memberId:m.id, present:false};
+    return `<label class="checkbox-row" style="margin-bottom:6px"><input type="checkbox" class="attChk" data-id="${m.id}" ${a.present?'checked':''}> ${m.name}</label>`;
+  }).join('')}
+  </div>
+  <div class="modal-actions">
+    <button class="btn" onclick="closeModal()">Close</button>
+    ${canEdit()?`<button class="btn btn-danger" onclick="applyAbsencePenalties('${mt.id}')">Apply Absence Penalties</button><button class="btn btn-primary" onclick="saveAttendance('${mt.id}')">Save Attendance</button>`:''}
+  </div>`);
+}
+function saveAttendance(id){
+  const mt = DB.meetings.find(x=>x.id===id);
+  mt.attendance = Array.from(document.querySelectorAll('.attChk')).map(c=>({memberId:c.dataset.id, present:c.checked}));
+  logAudit('Update attendance', null, mt); saveDB(); closeModal(); toast('Attendance saved'); renderMeetings();
+}
+function applyAbsencePenalties(id){
+  const mt = DB.meetings.find(x=>x.id===id);
+  const absentees = Array.from(document.querySelectorAll('.attChk')).filter(c=>!c.checked).map(c=>c.dataset.id);
+  const amt = (DB.settings.penaltyTypes.find(t=>t.name==='Absent from Meeting')||{}).amount || 100;
+  absentees.forEach(mid=>{
+    DB.penalties.push({id:uid('pen'), memberId:mid, type:'Absent from Meeting', amount:amt, reason:'Absent — '+(mt.agenda||mt.date), dueDate:todayISO(), status:'Unpaid'});
+  });
+  logAudit('Apply absence penalties', null, {count:absentees.length});
+  saveDB(); closeModal(); toast(absentees.length+' penalty(ies) applied'); renderMeetings();
+}
+
+/* ---------------------- Dividends ---------------------- */
+function renderDividends(){
+  const el = document.getElementById('page-dividends');
+  el.innerHTML = `
+  <div class="card no-print">
+    <div class="card-head"><h3>Calculate Dividends</h3><span class="hint">Distributed based on: ${DB.settings.dividendWeight}</span></div>
+    <div class="field-row">
+      <div class="field"><label>Financial Year</label><input id="dvYear" value="${new Date().getFullYear()}"></div>
+      <div class="field"><label>Distributable Profit</label><input id="dvProfit" type="number" value="${Math.max(computeTotals().groupBalance,0).toFixed(2)}"></div>
+    </div>
+    ${canEdit()?`<button class="btn btn-primary" onclick="calculateDividends()">Calculate &amp; Distribute</button>`:''}
+  </div>
+  <div class="card">
+    <div class="card-head"><h3>Distribution History</h3>${DB.dividends.length?`<button class="btn btn-sm btn-gold no-print" onclick="exportDividendsPDF()">Download PDF</button>`:''}</div>
+    ${DB.dividends.length? [...DB.dividends].reverse().map(d=>`
+      <div class="section-title">FY ${d.year} — Distributed ${d.date} — Total ${fmt(d.totalProfit)}</div>
+      ${simpleTable(['Member','Weight Basis','Share'], d.distributions.map(x=>[memberName(x.memberId), fmt(x.basis), fmt(x.amount)]))}
+    `).join('') : `<div class="empty-state">No dividend distributions yet.</div>`}
+  </div>`;
+}
+function exportDividendsPDF(){
+  const rows = [];
+  [...DB.dividends].reverse().forEach(d=>{
+    d.distributions.forEach(x=> rows.push(['FY '+d.year+' ('+d.date+')', memberName(x.memberId), fmt(x.basis), fmt(x.amount)]));
+  });
+  exportPDF('Dividend Distribution History', ['Financial Year','Member','Weight Basis','Share'], rows, 'dividends.pdf');
+}
+function calculateDividends(){
+  const year = val('dvYear'); const profit = Number(val('dvProfit'));
+  if(!profit || profit<=0){ toast('Enter a valid profit amount'); return; }
+  const weightFn = m => {
+    const s = computeMemberSavings(m.id), c = computeMemberContributionsPaid(m.id);
+    if(DB.settings.dividendWeight==='savings') return s;
+    if(DB.settings.dividendWeight==='contributions') return c;
+    return s+c;
+  };
+  const totalWeight = DB.members.reduce((s,m)=>s+weightFn(m), 0);
+  const distributions = DB.members.map(m=>({memberId:m.id, basis:weightFn(m), amount: totalWeight? profit*(weightFn(m)/totalWeight) : 0}));
+  const d = {id:uid('dv'), year, totalProfit:profit, date:todayISO(), distributions};
+  DB.dividends.push(d); logAudit('Calculate dividends FY'+year, null, {profit});
+  saveDB(); toast('Dividends distributed'); renderDividends();
+}
+
+/* ---------------------- Settings ---------------------- */
+function renderSettings(){
+  const el = document.getElementById('page-settings');
+  const s = DB.settings;
+  el.innerHTML = `
+  <div class="card">
+    <div class="card-head"><h3>Group Information</h3></div>
+    <div class="field-row">
+      <div class="field"><label>Group Name</label><input id="s_name" value="${escapeHtml(s.groupName)}"></div>
+      <div class="field"><label>Currency</label><input id="s_currency" value="${s.currency}"></div>
+    </div>
+    <div class="field"><label>Financial Year Start</label><input type="date" id="s_fy" value="${s.financialYearStart}"></div>
+    <button class="btn btn-primary" onclick="saveGroupInfo()">Save</button>
+  </div>
+  <div class="card">
+    <div class="card-head"><h3>Contributions &amp; Loans</h3></div>
+    <div class="field-row">
+      <div class="field"><label>Standard Monthly Contribution</label><input type="number" id="s_contrib" value="${s.contributionAmount}"></div>
+      <div class="field"><label>Loan Interest Rate (annual %, default)</label><input type="number" id="s_rate" value="${s.loanInterestRate}"></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Default Interest Method</label><select id="s_method"><option value="flat" ${s.interestMethod==='flat'?'selected':''}>Flat Rate</option><option value="reducing" ${s.interestMethod==='reducing'?'selected':''}>Reducing Balance</option></select></div>
+      <div class="field"><label>Max Loan Multiplier (x savings)</label><input type="number" id="s_mult" value="${s.loanMultiplier}"></div>
+    </div>
+    <div class="checkbox-row"><input type="checkbox" id="s_withdraw" ${s.allowWithdrawals?'checked':''}><label for="s_withdraw" style="margin:0">Allow savings withdrawals</label></div>
+    <div style="margin-top:14px"><button class="btn btn-primary" onclick="saveFinanceSettings()">Save</button></div>
+  </div>
+  <div class="card">
+    <div class="card-head"><h3>Dividend Distribution Basis</h3></div>
+    <select id="s_divweight" onchange="DB.settings.dividendWeight=this.value;saveDB();toast('Saved')">
+      <option value="savings" ${s.dividendWeight==='savings'?'selected':''}>Based on Savings</option>
+      <option value="contributions" ${s.dividendWeight==='contributions'?'selected':''}>Based on Contributions</option>
+      <option value="both" ${s.dividendWeight==='both'?'selected':''}>Based on Savings + Contributions</option>
+    </select>
+  </div>
+  <div class="card">
+    <div class="card-head"><h3>Backup &amp; Security</h3></div>
+    <div class="row-actions">
+      <button class="btn" onclick="downloadBackup()">Download Backup (JSON)</button>
+      <label class="btn" style="cursor:pointer">Restore from Backup<input type="file" id="restoreFile" accept="application/json" style="display:none" onchange="restoreBackup(event)"></label>
+    </div>
+    <div class="form-note" style="margin-top:10px">Data auto-saves to this browser's storage on every change — the app works fully offline. Download a backup regularly for safekeeping.</div>
+  </div>
+  <div class="card" id="cloudSyncCard">
+    <div class="card-head"><h3>Cloud Sync (Firebase)</h3><span class="tag tag-gray" id="cloudStatusPill">Not connected</span></div>
+    <div class="form-note" style="margin-top:-4px">Connect a Firebase project to sync this group's data across devices. The app keeps working offline — changes made without internet queue automatically and sync once you're back online.</div>
+    ${getFirebaseConfig() ? `
+      <div class="form-note">Connected to Firebase project <b>${escapeHtml((getFirebaseConfig()||{}).projectId||'')}</b>. Sync group ID: <code>${escapeHtml(cloudGroupId||'')}</code></div>
+      <button class="btn btn-danger" onclick="disconnectFirebase()">Disconnect Cloud Sync</button>
+    ` : `
+      <div class="field"><label>Firebase Web App Config (paste the JSON object from your Firebase Console → Project Settings)</label>
+        <textarea id="fb_config" placeholder='{"apiKey":"...","authDomain":"...","projectId":"...","storageBucket":"...","messagingSenderId":"...","appId":"..."}' style="min-height:110px;font-family:var(--mono);font-size:12px;"></textarea>
+      </div>
+      <button class="btn btn-primary" onclick="connectFirebase()">Connect &amp; Enable Sync</button>
+      <div class="section-title" style="margin-top:18px">Firestore Security Rules</div>
+      <div class="form-note">In your Firebase Console → Firestore Database → Rules, paste the rules below. They allow only signed-in app sessions (the app signs in anonymously behind the scenes) to read/write this group's own document — no public access.</div>
+      <pre style="background:#0F2E2C;color:#CFE4DF;padding:14px 16px;border-radius:8px;font-size:11.5px;overflow-x:auto;line-height:1.6">rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /gfm_groups/{groupId} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}</pre>
+    `}
+  </div>`;
+  setCloudStatus(cloudStatus);
+}
+function saveGroupInfo(){
+  DB.settings.groupName = val('s_name'); DB.settings.currency = val('s_currency'); DB.settings.financialYearStart = val('s_fy');
+  saveDB(); document.getElementById('sbGroupName').textContent = DB.settings.groupName; toast('Saved');
+}
+function saveFinanceSettings(){
+  DB.settings.contributionAmount = Number(val('s_contrib'));
+  DB.settings.loanInterestRate = Number(val('s_rate'));
+  DB.settings.interestMethod = val('s_method');
+  DB.settings.loanMultiplier = Number(val('s_mult'));
+  DB.settings.allowWithdrawals = document.getElementById('s_withdraw').checked;
+  saveDB(); toast('Saved');
+}
+function downloadBackup(){
+  const blob = new Blob([JSON.stringify(DB,null,2)], {type:'application/json'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'gfm-backup-'+todayISO()+'.json'; a.click();
+}
+function restoreBackup(e){
+  const f = e.target.files[0]; if(!f) return;
+  const r = new FileReader();
+  r.onload = () => { try{ DB = JSON.parse(r.result); saveDB(); toast('Backup restored'); location.reload(); } catch(err){ toast('Invalid backup file'); } };
+  r.readAsText(f);
+}
+
+/* ---------------------- Users & Roles ---------------------- */
+function renderUsers(){
+  const el = document.getElementById('page-users');
+  el.innerHTML = `
+  <div class="card">
+    <div class="toolbar"><span class="muted">${DB.users.length} user account(s)</span><button class="btn btn-sm btn-gold" style="margin-left:auto" onclick="exportUsersPDF()">Download PDF</button>${canEdit()?`<button class="btn btn-primary" onclick="openUserForm()">+ Add User</button>`:''}</div>
+    <div class="table-wrap"><table><thead><tr><th>Username</th><th>Name</th><th>Role</th><th>Linked Member</th><th>Status</th>${canEdit()?'<th>Actions</th>':''}</tr></thead>
+    <tbody>${DB.users.map(u=>`<tr><td>${u.username}</td><td>${u.name}</td><td><span class="tag tag-blue">${u.role}</span></td><td>${u.memberId?memberName(u.memberId):'—'}</td><td><span class="tag ${u.active===false?'tag-gray':'tag-green'}">${u.active===false?'Deactivated':'Active'}</span></td>
+    ${canEdit()?`<td class="row-actions"><button class="btn btn-sm" onclick="resetPassword('${u.id}')">Reset Password</button><button class="btn btn-sm" onclick="toggleUserActive('${u.id}')" ${u.id===currentUser.id?'disabled':''}>${u.active===false?'Activate':'Deactivate'}</button><button class="btn btn-sm btn-danger" onclick="deleteUser('${u.id}')" ${u.id===currentUser.id?'disabled':''}>Delete</button></td>`:''}</tr>`).join('')}</tbody></table></div>
+  </div>
+  <div class="card"><div class="card-head"><h3>Available Roles</h3></div>
+    <div class="form-note">Super Admin — full access · Chairperson, Treasurer, Secretary, Committee Member — operational access · Member — can only see the group summary and their own account.</div>
+  </div>`;
+}
+function exportUsersPDF(){
+  const rows = DB.users.map(u=>[u.username, u.name, u.role, u.memberId?memberName(u.memberId):'—', u.active===false?'Deactivated':'Active']);
+  exportPDF('User Accounts', ['Username','Name','Role','Linked Member','Status'], rows, 'users.pdf');
+}
+function toggleUserActive(id){
+  if(id===currentUser.id){ toast("You can't deactivate your own account"); return; }
+  const u = DB.users.find(x=>x.id===id);
+  u.active = u.active===false ? true : false;
+  logAudit((u.active?'Activated':'Deactivated')+' user '+u.username, null, {active:u.active});
+  saveDB(); toast('User '+(u.active?'activated':'deactivated')); renderUsers();
+}
+function openUserForm(){
+  openModal(`<h3>Add User</h3>
+  <div class="field-row"><div class="field"><label>Full Name</label><input id="f_name"></div><div class="field"><label>Username</label><input id="f_uname"></div></div>
+  <div class="field-row"><div class="field"><label>Password</label><div class="pass-wrap"><input id="f_pass" type="password"><button type="button" class="pass-toggle" onclick="togglePass('f_pass',this)">&#128065;</button></div></div>
+  <div class="field"><label>Role</label><select id="f_role">${['Super Admin','Chairperson','Treasurer','Secretary','Committee Member','Member'].map(r=>`<option>${r}</option>`).join('')}</select></div></div>
+  <div class="field"><label>Link to Member (optional)</label><select id="f_link"><option value="">— None —</option>${DB.members.map(m=>`<option value="${m.id}">${m.name}</option>`).join('')}</select></div>
+  <div class="modal-actions"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveUser()">Save</button></div>`);
+}
+function saveUser(){
+  if(!val('f_uname') || !val('f_pass')){ toast('Username and password required'); return; }
+  if(DB.users.some(u=>u.username.toLowerCase()===val('f_uname').toLowerCase())){ toast('That username is already taken'); return; }
+  const u = {id:uid('u'), name:val('f_name')||val('f_uname'), username:val('f_uname'), password:val('f_pass'), role:val('f_role'), memberId:val('f_link')||null, active:true};
+  DB.users.push(u); logAudit('Add user '+u.username, null, {username:u.username, role:u.role}); saveDB(); closeModal(); toast('User created'); renderUsers();
+}
+function resetPassword(id){
+  const u = DB.users.find(x=>x.id===id);
+  if(!u) return;
+  openModal(`<h3>Reset Password</h3><div class="modal-sub">Set a new password for <b>${escapeHtml(u.username)}</b></div>
+  <div class="field"><label>New Password</label><div class="pass-wrap"><input id="f_newpass" type="password"><button type="button" class="pass-toggle" onclick="togglePass('f_newpass',this)">&#128065;</button></div></div>
+  <div class="modal-actions"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="confirmResetPassword('${id}')">Reset Password</button></div>`);
+}
+function confirmResetPassword(id){
+  const np = val('f_newpass');
+  if(!np){ toast('Enter a new password'); return; }
+  const u = DB.users.find(x=>x.id===id); u.password = np;
+  logAudit('Reset password for '+u.username, null, null); saveDB(); closeModal(); toast('Password reset');
+}
+function deleteUser(id){
+  if(id===currentUser.id){ toast("You can't delete your own account"); return; }
+  if(!confirm('Delete this user?')) return;
+  const u = DB.users.find(x=>x.id===id);
+  DB.users = DB.users.filter(x=>x.id!==id);
+  logAudit('Delete user '+u.username, u, null); saveDB(); toast('Deleted'); renderUsers();
+}
+
+/* ---------------------- Audit Trail ---------------------- */
+function renderAudit(){
+  const el = document.getElementById('page-audit');
+  el.innerHTML = `
+  <div class="card">
+    <div class="toolbar"><span class="muted">${DB.audit.length} log entries · newest first</span><button class="btn btn-sm btn-gold" style="margin-left:auto" onclick="exportAuditPDF()">Download PDF</button></div>
+    <div class="table-wrap"><table><thead><tr><th>Date/Time</th><th>User</th><th>Action</th><th>Old Value</th><th>New Value</th></tr></thead>
+    <tbody>${DB.audit.length? DB.audit.map(a=>`<tr><td>${new Date(a.date).toLocaleString()}</td><td>${a.user}</td><td>${a.action}</td><td style="max-width:220px;white-space:normal;font-size:11px;color:var(--muted)">${a.old?truncate(a.old,120):'—'}</td><td style="max-width:220px;white-space:normal;font-size:11px;color:var(--muted)">${a.new?truncate(a.new,120):'—'}</td></tr>`).join(''):`<tr class="empty-row"><td colspan="5">No activity recorded yet.</td></tr>`}</tbody></table></div>
+  </div>`;
+}
+function exportAuditPDF(){
+  const rows = DB.audit.map(a=>[new Date(a.date).toLocaleString(), a.user, a.action, a.old?truncate(a.old,60):'—', a.new?truncate(a.new,60):'—']);
+  exportPDF('Audit Trail', ['Date/Time','User','Action','Old Value','New Value'], rows, 'audit-trail.pdf');
+}
+
+/* ---------------------- Navigation / Boot ---------------------- */
+function initPages(){
+  const c = document.getElementById('pages');
+  if(c.children.length) return;
+  NAV.forEach(n=> c.insertAdjacentHTML('beforeend', `<div class="page" id="page-${n.key}"></div>`));
+  c.insertAdjacentHTML('beforeend', `<div class="page" id="page-memberProfile"></div>`);
+}
+function initNav(){
+  const isMember = currentUser.role === 'Member';
+  const allowed = isMember ? MEMBER_ROLE_PAGES : NAV.map(n=>n.key);
+  const list = document.getElementById('navList');
+  list.innerHTML = NAV.filter(n=>allowed.includes(n.key)).map(n=>{
+    const label = (isMember && n.key==='statements') ? 'My Account' : n.label;
+    const icon = (isMember && n.key==='statements') ? '&#128100;' : n.icon;
+    return `<div class="nav-item" data-key="${n.key}" onclick="showPage('${n.key}')"><span class="nav-icon">${icon}</span>${label}</div>`;
+  }).join('');
+}
+function renderPage(key){
+  const map = {
+    dashboard:renderDashboard, members:renderMembers, contributions:renderContributions, savings:renderSavings,
+    penalties:renderPenalties, loans:renderLoans, guarantors:renderGuarantors, incomeexpense:renderIncomeExpense,
+    cashbook:renderCashbook, reports:renderReports, statements:renderStatements, notifications:renderNotifications,
+    meetings:renderMeetings, dividends:renderDividends, users:renderUsers, settings:renderSettings, audit:renderAudit,
+    memberProfile:renderMemberProfile
+  };
+  if(map[key]) map[key]();
+}
+function showPage(key){
+  if(currentUser.role === 'Member' && !MEMBER_ROLE_PAGES.includes(key)) key = 'dashboard';
+  currentPage = key;
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active', n.dataset.key===key));
+  document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active', p.id==='page-'+key));
+  const nav = NAV.find(n=>n.key===key);
+  const isMember = currentUser.role === 'Member';
+  document.getElementById('pageTitle').textContent = (isMember && key==='statements') ? 'My Account' : (nav ? nav.label.replace('&amp;','&') : key);
+  document.getElementById('pageCrumb').textContent = (isMember && key==='statements') ? 'Your savings, contributions, loans and transactions' : (PAGE_CRUMBS[key] || '');
+  renderPage(key);
+}
+function boot(){
+  document.getElementById('sbGroupName').textContent = DB.settings.groupName;
+  document.getElementById('whoName').textContent = currentUser.name;
+  document.getElementById('whoRole').textContent = currentUser.role;
+  document.getElementById('whoAvatar').textContent = initials(currentUser.name);
+  initNav();
+  initPages();
+  restoreSidebarState();
+  initTableEnhancer();
+  showPage('dashboard');
+}
+
+/* ---------------------- Login / Logout ---------------------- */
+function doLogin(){
+  const u = val('loginUser'); const p = document.getElementById('loginPass').value;
+  const errEl = document.getElementById('loginError');
+  const user = DB.users.find(x=>x.username===u && x.password===p);
+  if(!user){ errEl.textContent = 'Invalid username or password.'; errEl.style.display='block'; return; }
+  if(user.active === false){ errEl.textContent = 'This account has been deactivated. Contact your group admin.'; errEl.style.display='block'; return; }
+  errEl.style.display='none';
+  currentUser = user;
+  document.getElementById('loginScreen').style.display='none';
+  document.getElementById('app').style.display='block';
+  boot();
+}
+function doLogout(){
+  currentUser = null;
+  document.getElementById('app').style.display='none';
+  document.getElementById('loginScreen').style.display='flex';
+  document.getElementById('loginUser').value=''; document.getElementById('loginPass').value='';
+  refreshAuthScreenState();
+}
+
+document.addEventListener('DOMContentLoaded', ()=>{
+  loadDB();
+  document.getElementById('loginGroupName').textContent = DB.settings.groupName || 'Group Funds Manager';
+  refreshAuthScreenState();
+  document.getElementById('loginUser').addEventListener('keydown', e=>{ if(e.key==='Enter') doLogin(); });
+  document.getElementById('loginPass').addEventListener('keydown', e=>{ if(e.key==='Enter') doLogin(); });
+  document.getElementById('regPass2') && document.getElementById('regPass2').addEventListener('keydown', e=>{ if(e.key==='Enter') doRegister(); });
+  initCloudSyncOnBoot();
+  if('serviceWorker' in navigator){
+    navigator.serviceWorker.register('sw.js').catch(()=>{ /* offline-first still works via localStorage even without SW */ });
+  }
+});
+
+</script>
+</body>
+</html>
