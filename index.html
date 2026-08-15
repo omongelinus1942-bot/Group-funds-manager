@@ -15,6 +15,8 @@
 <title>GFM — Group Funds Manager</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>if(window['pdfjsLib']){ window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'; }</script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
@@ -257,6 +259,14 @@ tbody tr:hover{background:#FAFBFA;}
 .modal-backdrop{position:fixed;inset:0;background:rgba(10,20,18,.5);display:none;align-items:flex-start;justify-content:center;z-index:500;overflow-y:auto;padding:40px 20px;}
 .modal-backdrop.active{display:flex;}
 .modal{background:#fff;border-radius:12px;width:520px;max-width:100%;padding:24px 26px;box-shadow:0 20px 60px rgba(0,0,0,.3);}
+.modal.modal-wide{width:760px;}
+.upload-drop{border:1.5px dashed var(--border);border-radius:10px;padding:22px;text-align:center;background:#fafcfb;margin-bottom:6px;}
+.upload-drop input[type=file]{width:100%;font-size:12.5px;}
+.preview-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:14px 0;}
+.preview-stat{background:#f5f7f6;border-radius:8px;padding:10px 12px;}
+.preview-stat .n{font-size:18px;font-weight:800;color:var(--navy);}
+.preview-stat .l{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-top:2px;}
+.mpesa-cat-select{padding:5px 7px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:#fff;}
 .modal h3{margin:0 0 4px;font-size:17px;}
 .modal .modal-sub{color:var(--muted);font-size:12.5px;margin-bottom:18px;}
 .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:6px;}
@@ -409,6 +419,7 @@ const NAV = [
   {key:'members', label:'Members', icon:'&#128100;'},
   {key:'contributions', label:'Contributions', icon:'&#128181;'},
   {key:'savings', label:'Savings', icon:'&#127974;'},
+  {key:'mpesa', label:'M-Pesa Statement', icon:'&#128241;'},
   {key:'penalties', label:'Penalties', icon:'&#9873;'},
   {key:'loans', label:'Loans', icon:'&#128179;'},
   {key:'guarantors', label:'Guarantors', icon:'&#129309;'},
@@ -426,7 +437,7 @@ const NAV = [
 const MEMBER_ROLE_PAGES = ['dashboard','statements'];
 const PAGE_CRUMBS = {
   dashboard:'Overview of group finances', members:'Register and manage members', contributions:'Monthly contribution tracking',
-  savings:'Member savings deposits and withdrawals', penalties:'Fines and penalty tracking', loans:'Loan applications and repayments',
+  savings:'Member savings deposits and withdrawals', mpesa:'Import and categorize M-Pesa statement transactions', penalties:'Fines and penalty tracking', loans:'Loan applications and repayments',
   guarantors:'Guarantor commitments and exposure', incomeexpense:'Other income and operating expenses', cashbook:'Full transaction ledger',
   reports:'Financial reports and exports', statements:'Individual member statements', notifications:'Upcoming reminders and alerts',
   meetings:'Meeting records and attendance', dividends:'Year-end profit distribution', users:'User accounts and roles',
@@ -443,13 +454,17 @@ function defaultDB(){
       penaltyTypes:[{name:'Late Contribution',amount:200},{name:'Absent from Meeting',amount:100},{name:'Late Attendance',amount:50},{name:'Misconduct',amount:300}]
     },
     users:[],
-    members:[], contributions:[], savings:[], penalties:[], loans:[], incomeExpense:[], meetings:[], dividends:[], audit:[]
+    members:[], contributions:[], savings:[], penalties:[], loans:[], incomeExpense:[], meetings:[], dividends:[], audit:[],
+    mpesaTransactions:[], mpesaImports:[]
   };
 }
 function loadDB(){
   const raw = localStorage.getItem('gfm_db_v1');
   if(raw){ try{ DB = JSON.parse(raw); }catch(e){ DB = defaultDB(); } }
   else { DB = defaultDB(); saveDB(); }
+  if(!Array.isArray(DB.mpesaTransactions)) DB.mpesaTransactions = [];
+  if(!Array.isArray(DB.mpesaImports)) DB.mpesaImports = [];
+  assignMissingPeriods();
 }
 function saveDB(){
   localStorage.setItem('gfm_db_v1', JSON.stringify(DB));
@@ -661,6 +676,7 @@ function seedTestData(){
   DB.dividends.push({id:uid('dv'), year:String(now.getFullYear()-1), totalProfit:distProfit, date:pastDt(200),
     distributions: members.map(m=>({memberId:m.id, basis:weightFn(m), amount: distProfit*(weightFn(m)/totalWeight)}))});
 
+  assignMissingPeriods();
   logAudit('Loaded sample test dataset (10 members)', null, {members:10});
 }
 
@@ -672,6 +688,79 @@ function logAudit(action, oldV, newV){
 /* ---------------------- Helpers ---------------------- */
 function uid(prefix){ return prefix+'_'+Math.random().toString(36).slice(2,9); }
 function todayISO(){ return new Date().toISOString().slice(0,10); }
+
+/* ---------------------- Time-Frame / Period helpers ---------------------- */
+const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+function dateParts(dateStr){
+  if(!dateStr) return null;
+  const [y,m,d] = String(dateStr).split('-').map(Number);
+  if(!y||!m||!d) return null;
+  return {y,m,d};
+}
+// Calendar week-of-month: Week N = ceil(day-of-month / 7). e.g. 15 Aug -> Week 3.
+function weekOfMonthFromDate(dateStr){
+  const p = dateParts(dateStr);
+  if(!p) return 1;
+  return Math.ceil(p.d/7);
+}
+function weeksInMonth(year, month){
+  year = Number(year); month = Number(month);
+  if(!year||!month) return 5;
+  const days = new Date(year, month, 0).getDate();
+  return Math.ceil(days/7);
+}
+function periodFromDate(dateStr){
+  const p = dateParts(dateStr);
+  const now = new Date();
+  if(!p) return {year:now.getFullYear(), month:now.getMonth()+1, week:1};
+  return {year:p.y, month:p.m, week:Math.ceil(p.d/7)};
+}
+function periodYearsInUse(){
+  let years = new Set();
+  const cur = new Date().getFullYear();
+  for(let y=cur-6;y<=cur+1;y++) years.add(y);
+  (DB.contributions||[]).forEach(c=>{ if(c.periodYear) years.add(Number(c.periodYear)); });
+  (DB.savings||[]).forEach(s=>{ if(s.periodYear) years.add(Number(s.periodYear)); });
+  (DB.mpesaTransactions||[]).forEach(t=>{ if(t.periodYear) years.add(Number(t.periodYear)); });
+  return Array.from(years).sort((a,b)=>b-a);
+}
+function yearOptions(selected, includeBlank, blankLabel){
+  let out = includeBlank? `<option value="">${blankLabel||'All Years'}</option>` : '';
+  out += periodYearsInUse().map(y=>`<option value="${y}" ${String(selected)===String(y)?'selected':''}>${y}</option>`).join('');
+  return out;
+}
+function monthOptions(selected, includeBlank, blankLabel){
+  let out = includeBlank? `<option value="">${blankLabel||'All Months'}</option>` : '';
+  out += MONTH_NAMES.map((n,i)=>`<option value="${i+1}" ${String(selected)===String(i+1)?'selected':''}>${n}</option>`).join('');
+  return out;
+}
+function weekOptions(year, month, selected, includeBlank, blankLabel){
+  const n = weeksInMonth(year, month);
+  let out = includeBlank? `<option value="">${blankLabel||'All Weeks'}</option>` : '';
+  for(let w=1; w<=n; w++) out += `<option value="${w}" ${String(selected)===String(w)?'selected':''}>Week ${w}</option>`;
+  return out;
+}
+function periodLabel(year, month, week){
+  if(!year || !month) return '<span class="muted">—</span>';
+  let s = `${year} | ${MONTH_NAMES[Number(month)-1]}`;
+  if(week) s += ` | Week ${week}`;
+  return s;
+}
+function assignMissingPeriods(){
+  (DB.contributions||[]).forEach(c=>{
+    if(!c.periodYear || !c.periodMonth){ const p = periodFromDate(c.date); c.periodYear = p.year; c.periodMonth = p.month; }
+  });
+  (DB.savings||[]).forEach(s=>{
+    if(!s.periodYear || !s.periodMonth || !s.periodWeek){ const p = periodFromDate(s.date); s.periodYear = s.periodYear||p.year; s.periodMonth = s.periodMonth||p.month; s.periodWeek = s.periodWeek||p.week; }
+  });
+  (DB.mpesaTransactions||[]).forEach(t=>{
+    if((t.category==='Savings' || t.category==='Monthly Contribution') && (!t.periodYear || !t.periodMonth)){
+      const p = periodFromDate(t.date);
+      t.periodYear = t.periodYear || p.year; t.periodMonth = t.periodMonth || p.month;
+      if(t.category==='Savings') t.periodWeek = t.periodWeek || p.week;
+    }
+  });
+}
 function CURRENCY(){ return DB.settings.currency || 'KES'; }
 function fmt(n){ n = Number(n)||0; return CURRENCY()+' '+n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function val(id){ const e=document.getElementById(id); return e? e.value.trim() : ''; }
@@ -685,8 +774,8 @@ function toast(msg){
   const d = document.createElement('div'); d.className='toast'; d.textContent=msg;
   w.appendChild(d); setTimeout(()=>d.remove(), 3000);
 }
-function openModal(html){ document.getElementById('modalBox').innerHTML = html; document.getElementById('modalBackdrop').classList.add('active'); }
-function closeModal(){ document.getElementById('modalBackdrop').classList.remove('active'); }
+function openModal(html, wide){ const box=document.getElementById('modalBox'); box.innerHTML = html; box.classList.toggle('modal-wide', !!wide); document.getElementById('modalBackdrop').classList.add('active'); }
+function closeModal(){ document.getElementById('modalBackdrop').classList.remove('active'); document.getElementById('modalBox').classList.remove('modal-wide'); }
 function canEdit(){ return currentUser && currentUser.role !== 'Member'; }
 function statusTag(s){ return s==='Active' ? `<span class="tag tag-green">Active</span>` : `<span class="tag tag-gray">Inactive</span>`; }
 function contribStatusTag(s){
@@ -966,8 +1055,8 @@ function computeTotals(){
   const totalSavings = DB.members.reduce((s,m)=>s+computeMemberSavings(m.id), 0);
   const activeLoans = DB.loans.filter(l=>l.status==='Active');
   const outstandingLoanBalance = activeLoans.reduce((s,l)=>s+loanCalc(l).outstanding, 0);
-  const thisMonth = new Date().toISOString().slice(0,7);
-  const monthlyContrib = DB.contributions.filter(c=>c.date && c.date.slice(0,7)===thisMonth).reduce((s,c)=>s+Number(c.amount), 0);
+  const nowP = periodFromDate(todayISO());
+  const monthlyContrib = DB.contributions.filter(c=>Number(c.periodYear)===nowP.year && Number(c.periodMonth)===nowP.month).reduce((s,c)=>s+Number(c.amount), 0);
   const penaltiesCollected = DB.penalties.filter(p=>p.status==='Paid').reduce((s,p)=>s+Number(p.amount), 0);
   const cashbook = buildCashbook();
   const groupBalance = cashbook.length ? cashbook[cashbook.length-1].balance : 0;
@@ -983,8 +1072,9 @@ function computeUpcoming(){
   });
   DB.penalties.filter(p=>p.status==='Unpaid').forEach(p=>items.push({type:'Penalty', member:memberName(p.memberId), due:p.dueDate, amount:p.amount}));
   const thisMonth = now.toISOString().slice(0,7);
+  const nowP2 = periodFromDate(todayISO());
   DB.members.filter(m=>m.status==='Active').forEach(m=>{
-    const paidThisMonth = DB.contributions.some(c=>c.memberId===m.id && c.date.slice(0,7)===thisMonth);
+    const paidThisMonth = DB.contributions.some(c=>c.memberId===m.id && Number(c.periodYear)===nowP2.year && Number(c.periodMonth)===nowP2.month);
     if(!paidThisMonth) items.push({type:'Monthly Contribution', member:m.name, due:thisMonth+'-28', amount:DB.settings.contributionAmount});
   });
   return items.sort((a,b)=> new Date(a.due) - new Date(b.due));
@@ -1227,10 +1317,10 @@ function renderMemberProfile(){
     </div>`;
   } else if(profileTab==='contributions'){
     const rows = DB.contributions.filter(c=>c.memberId===m.id).sort((a,b)=>new Date(b.date)-new Date(a.date));
-    body = `<div class="card">${simpleTable(['Date','Amount','Method','Reference','Status'], rows.map(c=>[c.date, fmt(c.amount), c.method, c.reference||'—', contribStatusTag(c.status)]))}</div>`;
+    body = `<div class="card">${simpleTable(['Date','Period','Amount','Method','Reference','Status'], rows.map(c=>[c.date, periodLabel(c.periodYear,c.periodMonth), fmt(c.amount), c.method, c.reference||'—', contribStatusTag(c.status)]))}</div>`;
   } else if(profileTab==='savings'){
     const rows = DB.savings.filter(s=>s.memberId===m.id).sort((a,b)=>new Date(b.date)-new Date(a.date));
-    body = `<div class="card">${simpleTable(['Date','Type','Direction','Amount'], rows.map(s=>[s.date, cap(s.type), cap(s.direction), fmt(s.amount)]))}</div>`;
+    body = `<div class="card">${simpleTable(['Date','Period','Type','Direction','Amount'], rows.map(s=>[s.date, periodLabel(s.periodYear,s.periodMonth,s.periodWeek), cap(s.type), cap(s.direction), fmt(s.amount)]))}</div>`;
   } else if(profileTab==='loans'){
     body = loans.length? loans.map(l=>{
       const calc = loanCalc(l);
@@ -1252,6 +1342,8 @@ function renderMemberProfile(){
   } else if(profileTab==='transactions'){
     const tx = memberTransactionHistory(m.id);
     body = `<div class="card">${simpleTable(['Date','Type','Description','Amount'], tx.map(t=>[t.date, t.type, t.desc, fmt(t.amount)]))}</div>`;
+  } else if(profileTab==='mpesa'){
+    body = renderMemberMpesaTab(m.id);
   }
 
   el.innerHTML = `
@@ -1261,42 +1353,53 @@ function renderMemberProfile(){
       <div><div style="font-size:19px;font-weight:700">${escapeHtml(m.name)}</div><div class="muted">${m.memberNo} · ${statusTag(m.status)}</div></div>
     </div>
     <div class="pill-tabs no-print" style="margin-top:16px">
-      ${['overview','contributions','savings','loans','penalties','dividends','transactions'].map(t=>`<div class="pill-tab ${profileTab===t?'active':''}" onclick="setProfileTab('${t}')">${cap(t)}</div>`).join('')}
+      ${['overview','contributions','savings','loans','penalties','dividends','transactions','mpesa'].map(t=>`<div class="pill-tab ${profileTab===t?'active':''}" onclick="setProfileTab('${t}')">${t==='mpesa'?'M-Pesa':cap(t)}</div>`).join('')}
     </div>
     ${body}
   `;
 }
 
 /* ---------------------- Contributions ---------------------- */
+function contribFilteredRows(){
+  const memberF = document.getElementById('contribMemberFilter')?.value || '';
+  const yearF = document.getElementById('contribYearFilter')?.value || '';
+  const monthF = document.getElementById('contribMonthFilter')?.value || '';
+  return DB.contributions.filter(c=>{
+    if(memberF && c.memberId!==memberF) return false;
+    if(yearF && String(c.periodYear)!==String(yearF)) return false;
+    if(monthF && String(c.periodMonth)!==String(monthF)) return false;
+    return true;
+  }).sort((a,b)=>new Date(b.date)-new Date(a.date));
+}
 function renderContributions(){
   const el = document.getElementById('page-contributions');
   const memberF = document.getElementById('contribMemberFilter')?.value || '';
+  const yearF = document.getElementById('contribYearFilter')?.value || '';
   const monthF = document.getElementById('contribMonthFilter')?.value || '';
-  let rows = DB.contributions.filter(c=>{
-    if(memberF && c.memberId!==memberF) return false;
-    if(monthF && c.date.slice(0,7)!==monthF) return false;
-    return true;
-  }).sort((a,b)=>new Date(b.date)-new Date(a.date));
+  const rows = contribFilteredRows();
+  const filteredTotal = rows.reduce((s,c)=>s+Number(c.amount),0);
+  const nowP = periodFromDate(todayISO());
   el.innerHTML = `
   <div class="grid grid-3">
     <div class="stat-card"><div class="stat-label">Standard Monthly Amount</div><div class="stat-value">${fmt(DB.settings.contributionAmount)}</div>
       ${canEdit()?`<div style="margin-top:10px"><button class="btn btn-sm" onclick="editStandardContribution()">Change Amount</button></div>`:''}
     </div>
-    <div class="stat-card green"><div class="stat-label">Collected This Month</div><div class="stat-value">${fmt(DB.contributions.filter(c=>c.date.slice(0,7)===new Date().toISOString().slice(0,7)).reduce((s,c)=>s+Number(c.amount),0))}</div></div>
+    <div class="stat-card green"><div class="stat-label">Collected This Month</div><div class="stat-value">${fmt(DB.contributions.filter(c=>Number(c.periodYear)===nowP.year && Number(c.periodMonth)===nowP.month).reduce((s,c)=>s+Number(c.amount),0))}</div></div>
     <div class="stat-card warn"><div class="stat-label">Total Outstanding (All Members)</div><div class="stat-value">${fmt(DB.members.reduce((s,m)=>s+outstandingContribution(m),0))}</div></div>
   </div>
   <div class="card">
     <div class="toolbar">
       <select id="contribMemberFilter" onchange="renderContributions()"><option value="">All members</option>${DB.members.map(m=>`<option value="${m.id}" ${memberF===m.id?'selected':''}>${m.name}</option>`).join('')}</select>
-      <input type="month" id="contribMonthFilter" value="${monthF}" onchange="renderContributions()">
-      <span class="muted" style="margin-left:auto">${rows.length} payment(s)</span>
+      <select id="contribYearFilter" onchange="renderContributions()">${yearOptions(yearF, true)}</select>
+      <select id="contribMonthFilter" onchange="renderContributions()">${monthOptions(monthF, true)}</select>
+      <span class="muted" style="margin-left:auto">${rows.length} payment(s) · ${fmt(filteredTotal)} in view</span>
       <button class="btn btn-sm btn-gold" onclick="exportContributionsPDF()">Download PDF</button>
       ${canEdit()?`<button class="btn btn-primary" onclick="openContributionForm()">+ Record Payment</button>`:''}
     </div>
     <div class="table-wrap"><table>
-      <thead><tr><th>Date</th><th>Member</th><th class="num">Amount</th><th>Method</th><th>Reference</th><th>Status</th>${canEdit()?'<th>Actions</th>':''}</tr></thead>
-      <tbody>${rows.length? rows.map(c=>`<tr><td>${c.date}</td><td>${memberName(c.memberId)}</td><td class="num">${fmt(c.amount)}</td><td>${c.method}</td><td>${c.reference||'—'}</td><td>${contribStatusTag(c.status)}</td>
-      ${canEdit()?`<td class="row-actions"><button class="btn btn-sm" onclick="openContributionForm('${c.id}')">Edit</button><button class="btn btn-sm btn-danger" onclick="deleteContribution('${c.id}')">Delete</button></td>`:''}</tr>`).join(''):`<tr class="empty-row"><td colspan="7">No contributions recorded.</td></tr>`}</tbody>
+      <thead><tr><th>Date</th><th>Period</th><th>Member</th><th class="num">Amount</th><th>Method</th><th>Reference</th><th>Status</th>${canEdit()?'<th>Actions</th>':''}</tr></thead>
+      <tbody>${rows.length? rows.map(c=>`<tr><td>${c.date}</td><td>${periodLabel(c.periodYear,c.periodMonth)}</td><td>${memberName(c.memberId)}</td><td class="num">${fmt(c.amount)}</td><td>${c.method}</td><td>${c.reference||'—'}</td><td>${contribStatusTag(c.status)}</td>
+      ${canEdit()?`<td class="row-actions"><button class="btn btn-sm" onclick="openContributionForm('${c.id}')">Edit</button><button class="btn btn-sm btn-danger" onclick="deleteContribution('${c.id}')">Delete</button></td>`:''}</tr>`).join(''):`<tr class="empty-row"><td colspan="8">No contributions recorded.</td></tr>`}</tbody>
     </table></div>
   </div>
   <div class="card">
@@ -1311,14 +1414,8 @@ function renderContributions(){
   </div>`;
 }
 function exportContributionsPDF(){
-  const memberF = document.getElementById('contribMemberFilter')?.value || '';
-  const monthF = document.getElementById('contribMonthFilter')?.value || '';
-  const rows = DB.contributions.filter(c=>{
-    if(memberF && c.memberId!==memberF) return false;
-    if(monthF && c.date.slice(0,7)!==monthF) return false;
-    return true;
-  }).sort((a,b)=>new Date(b.date)-new Date(a.date)).map(c=>[c.date, memberName(c.memberId), fmt(c.amount), c.method, c.reference||'—', c.status]);
-  exportPDF('Contributions Report', ['Date','Member','Amount','Method','Reference','Status'], rows, 'contributions.pdf');
+  const rows = contribFilteredRows().map(c=>[c.date, `${c.periodYear||'—'} ${c.periodMonth?MONTH_NAMES[c.periodMonth-1]:''}`.trim(), memberName(c.memberId), fmt(c.amount), c.method, c.reference||'—', c.status]);
+  exportPDF('Contributions Report', ['Date','Period','Member','Amount','Method','Reference','Status'], rows, 'contributions.pdf');
 }
 function editStandardContribution(){
   openModal(`<h3>Standard Monthly Contribution</h3><div class="modal-sub">Applies to all members going forward</div>
@@ -1327,6 +1424,9 @@ function editStandardContribution(){
 }
 function openContributionForm(id){
   const c = id? DB.contributions.find(x=>x.id===id) : null;
+  const defaultPeriod = periodFromDate(c?c.date:todayISO());
+  const py = c? (c.periodYear||defaultPeriod.year) : defaultPeriod.year;
+  const pm = c? (c.periodMonth||defaultPeriod.month) : defaultPeriod.month;
   openModal(`<h3>${c?'Edit':'Record'} Contribution Payment</h3>
   <div class="field"><label>Member</label><select id="f_member">${DB.members.map(m=>`<option value="${m.id}" ${c&&c.memberId===m.id?'selected':''}>${m.name}</option>`).join('')}</select></div>
   <div class="field-row">
@@ -1337,13 +1437,20 @@ function openContributionForm(id){
     <div class="field"><label>Payment Method</label><select id="f_method"><option ${c&&c.method==='Cash'?'selected':''}>Cash</option><option ${c&&c.method==='M-Pesa'?'selected':''}>M-Pesa</option><option ${c&&c.method==='Bank'?'selected':''}>Bank</option></select></div>
     <div class="field"><label>Reference Number</label><input id="f_ref" value="${c?c.reference||'':''}"></div>
   </div>
+  <div class="form-note">Contribution Period — which month this payment counts towards. Does not have to match the payment date above.</div>
+  <div class="field-row">
+    <div class="field"><label>Period Year</label><select id="f_pyear">${yearOptions(py)}</select></div>
+    <div class="field"><label>Period Month</label><select id="f_pmonth">${monthOptions(pm)}</select></div>
+  </div>
   <div class="modal-actions"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveContribution(${c?`'${c.id}'`:'null'})">Save Payment</button></div>`);
 }
 function saveContribution(id){
   const amount = Number(val('f_amount'));
   const status = amount >= DB.settings.contributionAmount ? 'Full' : (amount>0 ? 'Partial' : 'Late');
-  const data = {memberId:val('f_member'), date:val('f_date'), amount, method:val('f_method'), reference:val('f_ref'), status};
+  const periodYear = Number(val('f_pyear')), periodMonth = Number(val('f_pmonth'));
+  const data = {memberId:val('f_member'), date:val('f_date'), amount, method:val('f_method'), reference:val('f_ref'), status, periodYear, periodMonth};
   if(!data.date || !amount){ toast('Date and amount are required'); return; }
+  if(!periodYear || !periodMonth){ toast('Contribution period (Year and Month) is required'); return; }
   if(id){ const c=DB.contributions.find(x=>x.id===id); const old={...c}; Object.assign(c,data); logAudit('Edit contribution', old, c); }
   else{ const c={id:uid('con'), ...data}; DB.contributions.push(c); logAudit('Record contribution', null, c); }
   saveDB(); closeModal(); toast('Contribution saved'); renderContributions();
@@ -1356,10 +1463,34 @@ function deleteContribution(id){
 }
 
 /* ---------------------- Savings ---------------------- */
+function savFilteredRows(){
+  const memberF = document.getElementById('savMemberFilter')?.value || '';
+  const yearF = document.getElementById('savYearFilter')?.value || '';
+  const monthF = document.getElementById('savMonthFilter')?.value || '';
+  const weekF = document.getElementById('savWeekFilter')?.value || '';
+  return DB.savings.filter(s=>{
+    if(memberF && s.memberId!==memberF) return false;
+    if(yearF && String(s.periodYear)!==String(yearF)) return false;
+    if(monthF && String(s.periodMonth)!==String(monthF)) return false;
+    if(weekF && String(s.periodWeek)!==String(weekF)) return false;
+    return true;
+  }).sort((a,b)=>new Date(b.date)-new Date(a.date));
+}
+function savUpdateWeekOptions(){
+  const yearF = document.getElementById('savYearFilter')?.value || '';
+  const monthF = document.getElementById('savMonthFilter')?.value || '';
+  const weekSel = document.getElementById('savWeekFilter');
+  if(weekSel) weekSel.innerHTML = weekOptions(yearF, monthF, weekSel.value, true);
+  renderSavings();
+}
 function renderSavings(){
   const el = document.getElementById('page-savings');
   const memberF = document.getElementById('savMemberFilter')?.value || '';
-  let rows = DB.savings.filter(s=> !memberF || s.memberId===memberF).sort((a,b)=>new Date(b.date)-new Date(a.date));
+  const yearF = document.getElementById('savYearFilter')?.value || '';
+  const monthF = document.getElementById('savMonthFilter')?.value || '';
+  const weekF = document.getElementById('savWeekFilter')?.value || '';
+  const rows = savFilteredRows();
+  const filteredTotal = rows.reduce((s,x)=> s + (x.direction==='deposit'?Number(x.amount):-Number(x.amount)), 0);
   const total = DB.members.reduce((s,m)=>s+computeMemberSavings(m.id), 0);
   el.innerHTML = `
   <div class="grid grid-3">
@@ -1370,13 +1501,17 @@ function renderSavings(){
   <div class="card">
     <div class="toolbar">
       <select id="savMemberFilter" onchange="renderSavings()"><option value="">All members</option>${DB.members.map(m=>`<option value="${m.id}" ${memberF===m.id?'selected':''}>${m.name}</option>`).join('')}</select>
+      <select id="savYearFilter" onchange="savUpdateWeekOptions()">${yearOptions(yearF, true)}</select>
+      <select id="savMonthFilter" onchange="savUpdateWeekOptions()">${monthOptions(monthF, true)}</select>
+      <select id="savWeekFilter" onchange="renderSavings()">${weekOptions(yearF, monthF, weekF, true)}</select>
       <span class="muted" style="margin-left:auto">Withdrawals ${DB.settings.allowWithdrawals?'allowed':'disabled'} (see Settings)</span>
       <button class="btn btn-sm btn-gold" onclick="exportSavingsPDF()">Download PDF</button>
       ${canEdit()?`<button class="btn btn-primary" onclick="openSavingsForm()">+ Record Savings</button>`:''}
     </div>
-    <div class="table-wrap"><table><thead><tr><th>Date</th><th>Member</th><th>Type</th><th>Direction</th><th class="num">Amount</th>${canEdit()?'<th>Actions</th>':''}</tr></thead>
-    <tbody>${rows.length? rows.map(s=>`<tr><td>${s.date}</td><td>${memberName(s.memberId)}</td><td>${cap(s.type)}</td><td>${s.direction==='deposit'?'<span class="tag tag-green">Deposit</span>':'<span class="tag tag-red">Withdrawal</span>'}</td><td class="num">${fmt(s.amount)}</td>
-    ${canEdit()?`<td class="row-actions"><button class="btn btn-sm btn-danger" onclick="deleteSavings('${s.id}')">Delete</button></td>`:''}</tr>`).join(''):`<tr class="empty-row"><td colspan="6">No savings records.</td></tr>`}</tbody></table></div>
+    <span class="muted">${rows.length} record(s) · ${fmt(filteredTotal)} net in view</span>
+    <div class="table-wrap"><table><thead><tr><th>Date</th><th>Period</th><th>Member</th><th>Type</th><th>Direction</th><th class="num">Amount</th>${canEdit()?'<th>Actions</th>':''}</tr></thead>
+    <tbody>${rows.length? rows.map(s=>`<tr><td>${s.date}</td><td>${periodLabel(s.periodYear,s.periodMonth,s.periodWeek)}</td><td>${memberName(s.memberId)}</td><td>${cap(s.type)}</td><td>${s.direction==='deposit'?'<span class="tag tag-green">Deposit</span>':'<span class="tag tag-red">Withdrawal</span>'}</td><td class="num">${fmt(s.amount)}</td>
+    ${canEdit()?`<td class="row-actions"><button class="btn btn-sm btn-danger" onclick="deleteSavings('${s.id}')">Delete</button></td>`:''}</tr>`).join(''):`<tr class="empty-row"><td colspan="7">No savings records.</td></tr>`}</tbody></table></div>
   </div>
   <div class="card">
     <div class="card-head"><h3>Savings Balance per Member</h3></div>
@@ -1386,12 +1521,16 @@ function renderSavings(){
   </div>`;
 }
 function exportSavingsPDF(){
-  const memberF = document.getElementById('savMemberFilter')?.value || '';
-  const rows = DB.savings.filter(s=> !memberF || s.memberId===memberF).sort((a,b)=>new Date(b.date)-new Date(a.date))
-    .map(s=>[s.date, memberName(s.memberId), cap(s.type), cap(s.direction), fmt(s.amount)]);
-  exportPDF('Savings Report', ['Date','Member','Type','Direction','Amount'], rows, 'savings.pdf');
+  const rows = savFilteredRows().map(s=>[s.date, periodLabel(s.periodYear,s.periodMonth,s.periodWeek).replace(/<[^>]+>/g,''), memberName(s.memberId), cap(s.type), cap(s.direction), fmt(s.amount)]);
+  exportPDF('Savings Report', ['Date','Period','Member','Type','Direction','Amount'], rows, 'savings.pdf');
+}
+function savFormUpdateWeek(){
+  const y = val('f_pyear'), m = val('f_pmonth');
+  const weekSel = document.getElementById('f_pweek');
+  if(weekSel) weekSel.innerHTML = weekOptions(y, m, weekSel.value);
 }
 function openSavingsForm(){
+  const p = periodFromDate(todayISO());
   openModal(`<h3>Record Savings</h3>
   <div class="field"><label>Member</label><select id="f_member">${DB.members.map(m=>`<option value="${m.id}">${m.name}</option>`).join('')}</select></div>
   <div class="field-row">
@@ -1403,16 +1542,24 @@ function openSavingsForm(){
     <div class="field"><label>Direction</label><select id="f_dir"><option value="deposit">Deposit</option>${DB.settings.allowWithdrawals?'<option value="withdraw">Withdrawal</option>':''}</select></div>
   </div>
   ${!DB.settings.allowWithdrawals?`<div class="form-note">Withdrawals are currently disabled in Settings.</div>`:''}
+  <div class="form-note">Saving Period — the Year, Month and Week this saving is recorded against.</div>
+  <div class="field-row">
+    <div class="field"><label>Period Year</label><select id="f_pyear" onchange="savFormUpdateWeek()">${yearOptions(p.year)}</select></div>
+    <div class="field"><label>Period Month</label><select id="f_pmonth" onchange="savFormUpdateWeek()">${monthOptions(p.month)}</select></div>
+    <div class="field"><label>Period Week</label><select id="f_pweek">${weekOptions(p.year, p.month, p.week)}</select></div>
+  </div>
   <div class="modal-actions"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveSavings()">Save</button></div>`);
 }
 function saveSavings(){
   const amount = Number(val('f_amount')); const memberId = val('f_member'); const direction = val('f_dir');
+  const periodYear = Number(val('f_pyear')), periodMonth = Number(val('f_pmonth')), periodWeek = Number(val('f_pweek'));
   if(!amount || amount<=0){ toast('Enter a valid amount'); return; }
+  if(!periodYear || !periodMonth || !periodWeek){ toast('Saving period (Year, Month and Week) is required'); return; }
   if(direction==='withdraw'){
     const bal = computeMemberSavings(memberId);
     if(amount>bal){ toast('Withdrawal exceeds savings balance'); return; }
   }
-  const s = {id:uid('sav'), memberId, date:val('f_date'), amount, type:val('f_type'), direction};
+  const s = {id:uid('sav'), memberId, date:val('f_date'), amount, type:val('f_type'), direction, periodYear, periodMonth, periodWeek};
   DB.savings.push(s); logAudit('Record savings '+direction, null, s); saveDB(); closeModal(); toast('Savings recorded'); renderSavings();
 }
 function deleteSavings(id){
@@ -1767,14 +1914,44 @@ function exportCashbookPDF(){
 
 /* ---------------------- Reports ---------------------- */
 function setReportTab(t){ reportTab = t; renderReports(); }
+function reportPeriodFilters(){
+  return {
+    memberF: document.getElementById('rptMemberFilter')?.value || '',
+    yearF: document.getElementById('rptYearFilter')?.value || '',
+    monthF: document.getElementById('rptMonthFilter')?.value || '',
+    weekF: document.getElementById('rptWeekFilter')?.value || ''
+  };
+}
+function reportUsesPeriodFilters(){ return reportTab==='contributions' || reportTab==='savings'; }
+function rptUpdateWeekOptions(){
+  const yearF = document.getElementById('rptYearFilter')?.value || '';
+  const monthF = document.getElementById('rptMonthFilter')?.value || '';
+  const weekSel = document.getElementById('rptWeekFilter');
+  if(weekSel) weekSel.innerHTML = weekOptions(yearF, monthF, weekSel.value, true);
+  renderReports();
+}
 function getReportData(){
   let headers=[], rows=[], title='';
+  const {memberF, yearF, monthF, weekF} = reportPeriodFilters();
   if(reportTab==='contributions'){
-    title='Monthly Contributions Report'; headers=['Date','Member','Amount','Method','Status'];
-    rows = DB.contributions.map(c=>[c.date, memberName(c.memberId), fmt(c.amount), c.method, c.status]);
+    title='Monthly Contributions Report'; headers=['Date','Period','Member','Amount','Method','Status'];
+    rows = DB.contributions.filter(c=>{
+      if(memberF && c.memberId!==memberF) return false;
+      if(yearF && String(c.periodYear)!==String(yearF)) return false;
+      if(monthF && String(c.periodMonth)!==String(monthF)) return false;
+      return true;
+    }).sort((a,b)=>new Date(b.date)-new Date(a.date))
+      .map(c=>[c.date, `${c.periodYear||'—'} ${c.periodMonth?MONTH_NAMES[c.periodMonth-1]:''}`.trim(), memberName(c.memberId), fmt(c.amount), c.method, c.status]);
   } else if(reportTab==='savings'){
-    title='Savings Report'; headers=['Member','Balance'];
-    rows = DB.members.map(m=>[m.name, fmt(computeMemberSavings(m.id))]);
+    title='Savings Report'; headers=['Date','Period','Member','Type','Direction','Amount'];
+    rows = DB.savings.filter(s=>{
+      if(memberF && s.memberId!==memberF) return false;
+      if(yearF && String(s.periodYear)!==String(yearF)) return false;
+      if(monthF && String(s.periodMonth)!==String(monthF)) return false;
+      if(weekF && String(s.periodWeek)!==String(weekF)) return false;
+      return true;
+    }).sort((a,b)=>new Date(b.date)-new Date(a.date))
+      .map(s=>[s.date, `${s.periodYear||'—'} ${s.periodMonth?MONTH_NAMES[s.periodMonth-1]:''}${s.periodWeek?' Week '+s.periodWeek:''}`.trim(), memberName(s.memberId), cap(s.type), cap(s.direction), fmt(s.amount)]);
   } else if(reportTab==='loans'){
     title='Loan Report'; headers=['Member','Approved','Status','Outstanding','Due Date'];
     rows = DB.loans.map(l=>[memberName(l.memberId), l.approvedAmount?fmt(l.approvedAmount):'—', l.status, l.status==='Active'?fmt(loanCalc(l).outstanding):'—', l.dueDate||'—']);
@@ -1818,6 +1995,8 @@ function renderReports(){
     ['interest','Interest Earned'],['incomeexpense','Income & Expense'],['cashbook','Cashbook'],
     ['defaulters','Defaulters'],['arrears','Loan Arrears'],['outstandingpenalties','Outstanding Penalties'],['annual','Annual Summary']
   ];
+  const usesPeriod = reportUsesPeriodFilters();
+  const {memberF, yearF, monthF, weekF} = reportPeriodFilters();
   const {headers, rows, title} = getReportData();
   el.innerHTML = `
   <div class="card no-print" style="padding-bottom:14px">
@@ -1825,6 +2004,12 @@ function renderReports(){
     <select id="reportSelect" onchange="setReportTab(this.value)" style="max-width:340px">
       ${tabs.map(([k,l])=>`<option value="${k}" ${reportTab===k?'selected':''}>${l}</option>`).join('')}
     </select>
+    ${usesPeriod?`<div class="toolbar" style="margin-top:12px;padding-top:0;border-top:none">
+      <select id="rptMemberFilter" onchange="renderReports()"><option value="">All members</option>${DB.members.map(m=>`<option value="${m.id}" ${memberF===m.id?'selected':''}>${escapeHtml(m.name)}</option>`).join('')}</select>
+      <select id="rptYearFilter" onchange="rptUpdateWeekOptions()">${yearOptions(yearF, true)}</select>
+      <select id="rptMonthFilter" onchange="rptUpdateWeekOptions()">${monthOptions(monthF, true)}</select>
+      ${reportTab==='savings'?`<select id="rptWeekFilter" onchange="renderReports()">${weekOptions(yearF, monthF, weekF, true)}</select>`:''}
+    </div>`:''}
   </div>
   <div class="card">
     <div class="card-head"><h3>${title}</h3>
@@ -2231,6 +2416,493 @@ function exportAuditPDF(){
   exportPDF('Audit Trail', ['Date/Time','User','Action','Old Value','New Value'], rows, 'audit-trail.pdf');
 }
 
+/* ---------------------- M-Pesa Statement Import ---------------------- */
+const MPESA_RECEIPT_RE = /^(?=[A-Z0-9]{10}$)(?=.*[0-9])[A-Z][A-Z0-9]{9}$/;
+const MPESA_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const MPESA_TIME_RE = /^\d{2}:\d{2}:\d{2}$/;
+const MPESA_DATETIME_RE = /^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}$/;
+const MPESA_AMOUNT_RE = /^-?[\d,]+\.\d{2}$/;
+// Matches a masked or full phone number (e.g. "254729***175" or "254729123456")
+// followed by the counterparty's name in capitals, as it appears at the end of
+// a Details cell such as "Funds received from - 254729***175 CHIMEGA MAJELE"
+// or "Customer Transfer to - 254715***351 KWAMBOKA IMMACULATE". Prefix-agnostic
+// on purpose so it also catches "Transfer to", "Sent to", etc.
+const MPESA_SENDER_RE = /(?:^|\s)([\d*]{9,15})\s+([A-Z][A-Z'.-]*(?:\s+[A-Z][A-Z'.-]*)+)\s*$/;
+let mpesaPending = null; // {filename, rows, newRows, dupRows, invalidRows}
+
+function ensurePdfJs(){
+  return new Promise((resolve, reject)=>{
+    if(window.pdfjsLib) return resolve();
+    let tries = 0;
+    const t = setInterval(()=>{
+      tries++;
+      if(window.pdfjsLib){ clearInterval(t); resolve(); }
+      else if(tries>40){ clearInterval(t); reject(new Error('The PDF engine failed to load. Check your connection and try again.')); }
+    }, 150);
+  });
+}
+
+function mpesaTitleCase(s){ return String(s||'').toLowerCase().replace(/\b[a-z]/g, c=>c.toUpperCase()); }
+
+function mpesaRowKey(r){ return [r.receiptNo, r.completionTime, r.details, r.paidIn, r.withdrawn, r.balance].join('|'); }
+
+async function parseMpesaStatementPdf(arrayBuffer, password){
+  await ensurePdfJs();
+  let pdf;
+  try{
+    pdf = await window.pdfjsLib.getDocument({data: arrayBuffer, password: password || undefined}).promise;
+  } catch(err){
+    const msg = (err && err.message) || '';
+    if((err && err.name === 'PasswordException') || /password/i.test(msg)){
+      const e = new Error('PASSWORD_REQUIRED'); e.code = 'PASSWORD_REQUIRED'; throw e;
+    }
+    const e = new Error('Could not read this PDF — the file may be corrupted or in an unsupported format.'); e.code='UNREADABLE'; throw e;
+  }
+
+  let headerX = null;
+  const rows = [];
+  let current = null;
+
+  function finishCurrent(){
+    if(current){
+      current.details = (current.details||'').replace(/\s+/g,' ').trim();
+      rows.push(current);
+      current = null;
+    }
+  }
+
+  for(let p=1; p<=pdf.numPages; p++){
+    const page = await pdf.getPage(p);
+    const content = await page.getTextContent();
+    const items = content.items.map(it=>({str: it.str, x: it.transform[4], y: it.transform[5]})).filter(it=>it.str.trim()!=='');
+    if(!items.length) continue;
+    items.sort((a,b)=> b.y-a.y || a.x-b.x);
+    const lines = [];
+    let curY=null, curLine=[];
+    items.forEach(it=>{
+      if(curY===null || Math.abs(it.y-curY)>3){
+        if(curLine.length) lines.push(curLine);
+        curLine=[it]; curY=it.y;
+      } else curLine.push(it);
+    });
+    if(curLine.length) lines.push(curLine);
+
+    lines.forEach(line=>{
+      line.sort((a,b)=>a.x-b.x);
+      const tokens = line.map(it=>it.str.trim()).filter(Boolean);
+      if(!tokens.length) return;
+      const joined = tokens.join(' ');
+
+      const hasReceiptHdr = line.some(it=>/^receipt\s*no\.?$/i.test(it.str.trim()));
+      const hasBalanceHdr = line.some(it=>/^balance$/i.test(it.str.trim()));
+      if(hasReceiptHdr && hasBalanceHdr){
+        const hx = {};
+        line.forEach(it=>{
+          const s = it.str.trim().toLowerCase();
+          if(/^receipt\s*no\.?$/.test(s)) hx.receipt = it.x;
+          else if(/^completion\s*time$/.test(s)) hx.time = it.x;
+          else if(/^details$/.test(s)) hx.details = it.x;
+          else if(/^transaction\s*status$/.test(s)) hx.status = it.x;
+          else if(/^paid\s*in$/.test(s)) hx.paidIn = it.x;
+          else if(/^withdrawn$/.test(s)) hx.withdrawn = it.x;
+          else if(/^balance$/.test(s)) hx.balance = it.x;
+        });
+        if(hx.paidIn!==undefined && hx.withdrawn!==undefined && hx.balance!==undefined) headerX = hx;
+        return;
+      }
+      if(/disclaimer/i.test(joined) || /^page\s+\d+\s+of\s+\d+$/i.test(joined) || /detailed statement/i.test(joined)) return;
+
+      if(MPESA_RECEIPT_RE.test(tokens[0])){
+        finishCurrent();
+        current = {receiptNo: tokens[0], completionTime:'', details:'', status:'', paidIn:null, withdrawn:null, balance:null, valid:true, reason:''};
+
+        // Parse the rest of the line by regex rather than strict token boundaries —
+        // some PDF generators run adjacent cell text together with no separating space.
+        let rest = tokens.slice(1).join(' ');
+        const dtMatch = rest.match(/^\s*(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})/);
+        if(dtMatch){ current.completionTime = dtMatch[1]; rest = rest.slice(dtMatch[0].length); }
+        const compMatch = rest.match(/Completed/i);
+        if(compMatch){ current.details = rest.slice(0, compMatch.index).trim(); current.status = 'Completed'; }
+        else { current.details = rest.trim(); }
+
+        const numericItems = line.filter(it=>MPESA_AMOUNT_RE.test(it.str.trim()));
+        if(headerX && headerX.paidIn!==undefined){
+          numericItems.forEach(it=>{
+            const v = Number(it.str.replace(/,/g,''));
+            const dPaid = Math.abs(it.x-headerX.paidIn), dWithdraw = Math.abs(it.x-headerX.withdrawn), dBal = Math.abs(it.x-headerX.balance);
+            const min = Math.min(dPaid, dWithdraw, dBal);
+            if(min===dBal) current.balance = v;
+            else if(min===dPaid) current.paidIn = v;
+            else current.withdrawn = v;
+          });
+        } else if(numericItems.length>=2){
+          const vals = numericItems.map(it=>Number(it.str.replace(/,/g,'')));
+          current._rawAmount = vals[0];
+          current.balance = vals[vals.length-1];
+        } else if(numericItems.length===1){
+          current.balance = Number(numericItems[0].str.replace(/,/g,''));
+        }
+      } else if(current){
+        if(!current.status){ current.details = (current.details+' '+joined).trim(); }
+        else if(tokens.every(t=>!MPESA_AMOUNT_RE.test(t))){
+          // The Details cell often wraps onto a second line containing just the
+          // masked/full phone number and sender name, e.g. "254729***175 CHIMEGA MAJELE".
+          // That line legitimately starts with a digit, so a leading-digit check must
+          // NOT be used to exclude it (that was previously dropping the sender's name).
+          // We only skip lines that are pure currency amounts (already filtered above).
+          current.details = (current.details+' '+joined).trim();
+        }
+      }
+    });
+  }
+  finishCurrent();
+
+  for(let i=0;i<rows.length;i++){
+    const r = rows[i];
+    if(r.paidIn===null && r.withdrawn===null && r._rawAmount!==undefined){
+      const prev = rows[i+1];
+      if(prev && prev.balance!==null && r.balance!==null){
+        const diff = r.balance - prev.balance;
+        if(diff>=0) r.paidIn = Math.abs(r._rawAmount); else r.withdrawn = Math.abs(r._rawAmount);
+      } else if(/received/i.test(r.details||'')){ r.paidIn = r._rawAmount; }
+      else { r.withdrawn = r._rawAmount; }
+    }
+    if(r.paidIn===null) r.paidIn = 0;
+    if(r.withdrawn===null) r.withdrawn = 0;
+    if(r.balance===null) r.balance = 0;
+    if(!r.receiptNo || !r.completionTime){ r.valid = false; r.reason = 'Missing receipt number or date/time'; }
+  }
+
+  return rows.map(r=>{
+    let sender = null;
+    const m = (r.details||'').match(MPESA_SENDER_RE);
+    if(m) sender = mpesaTitleCase(m[2].trim());
+    const dateOnly = (r.completionTime.match(/^\d{4}-\d{2}-\d{2}/)||[])[0] || '';
+    return {
+      receiptNo: r.receiptNo, completionTime: r.completionTime, date: dateOnly, details: r.details||'',
+      status: r.status || 'Completed', paidIn: r.paidIn||0, withdrawn: r.withdrawn||0, balance: r.balance||0,
+      senderName: sender, valid: r.valid!==false, reason: r.reason||''
+    };
+  });
+}
+
+function findOrCreateMemberByName(name){
+  if(!name) return null;
+  const norm = name.trim().toUpperCase();
+  let m = DB.members.find(x=>(x.name||'').trim().toUpperCase()===norm);
+  if(m) return m.id;
+  m = {id:uid('m'), name:mpesaTitleCase(name.trim()), memberNo:nextMemberNo(), phone:'', email:'', dateJoined:todayISO(), status:'Active', emergencyContact:'', emergencyPhone:'', source:'M-Pesa Import'};
+  DB.members.push(m);
+  logAudit('Auto-created member from M-Pesa import: '+m.name, null, {name:m.name, memberNo:m.memberNo});
+  return m.id;
+}
+
+function mpesaCategoryTag(cat, hasIncome){
+  if(!hasIncome) return `<span class="tag tag-gray">N/A</span>`;
+  if(cat==='Savings') return `<span class="tag tag-green">Savings</span>`;
+  if(cat==='Monthly Contribution') return `<span class="tag tag-blue">Monthly Contribution</span>`;
+  return `<span class="tag tag-amber">Uncategorized</span>`;
+}
+
+function openMpesaUploadModal(){
+  openModal(`
+  <h3>Upload M-Pesa Statement</h3>
+  <div class="modal-sub">Upload the PDF M-Pesa statement. Password-protected statements need the password below.</div>
+  <div class="upload-drop">
+    <input type="file" id="mp_file" accept="application/pdf">
+  </div>
+  <div class="field"><label>PDF Password (if protected)</label><div class="pass-wrap"><input id="mp_pass" type="password" placeholder="Leave blank if not protected"><button type="button" class="pass-toggle" onclick="togglePass('mp_pass',this)">&#128065;</button></div></div>
+  <div class="login-error" id="mp_error" style="display:none"></div>
+  <div class="modal-actions"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn btn-primary" id="mp_previewBtn" onclick="mpesaRunPreview()">Preview Statement</button></div>
+  `);
+}
+
+async function mpesaRunPreview(){
+  const fileInput = document.getElementById('mp_file');
+  const errEl = document.getElementById('mp_error');
+  const btn = document.getElementById('mp_previewBtn');
+  errEl.style.display='none';
+  const file = fileInput.files && fileInput.files[0];
+  if(!file){ errEl.textContent='Choose a PDF statement file first.'; errEl.style.display='block'; return; }
+  const password = document.getElementById('mp_pass').value;
+  btn.disabled = true; btn.textContent = 'Reading statement…';
+  try{
+    const buf = await file.arrayBuffer();
+    const rows = await parseMpesaStatementPdf(buf, password);
+    if(!rows.length){ errEl.textContent='No transactions could be detected in this PDF. It may not match the expected statement format.'; errEl.style.display='block'; btn.disabled=false; btn.textContent='Preview Statement'; return; }
+    const existingKeys = new Set(DB.mpesaTransactions.map(mpesaRowKey));
+    const validRows = rows.filter(r=>r.valid);
+    const invalidRows = rows.filter(r=>!r.valid);
+    const newRows = validRows.filter(r=>!existingKeys.has(mpesaRowKey(r)));
+    const dupRows = validRows.filter(r=>existingKeys.has(mpesaRowKey(r)));
+    const dates = validRows.map(r=>r.date).filter(Boolean).sort();
+    const totalAmount = newRows.reduce((s,r)=>s+r.paidIn, 0);
+    const uniqueMembers = new Set(newRows.map(r=>r.senderName).filter(Boolean)).size;
+    mpesaPending = {filename:file.name, password, rows, newRows, dupRows, invalidRows};
+    openModal(`
+    <h3>Import Preview</h3>
+    <div class="modal-sub">${escapeHtml(file.name)}</div>
+    <div class="preview-stats">
+      <div class="preview-stat"><div class="n">${validRows.length+invalidRows.length}</div><div class="l">Transactions Detected</div></div>
+      <div class="preview-stat"><div class="n" style="color:var(--green)">${newRows.length}</div><div class="l">New</div></div>
+      <div class="preview-stat"><div class="n" style="color:var(--amber)">${dupRows.length}</div><div class="l">Duplicates</div></div>
+      <div class="preview-stat"><div class="n" style="color:var(--red)">${invalidRows.length}</div><div class="l">Rejected / Invalid</div></div>
+      <div class="preview-stat"><div class="n">${dates.length? dates[0]+' → '+dates[dates.length-1] : '—'}</div><div class="l">Date Range</div></div>
+      <div class="preview-stat"><div class="n">${fmt(totalAmount)}</div><div class="l">Total Amount (new)</div></div>
+      <div class="preview-stat"><div class="n">${uniqueMembers}</div><div class="l">Unique Members Detected</div></div>
+    </div>
+    ${invalidRows.length? `<div class="form-note">${invalidRows.length} row(s) were missing required fields and will be skipped. They are not discarded — download the file again or check the PDF format.</div>`:''}
+    <div class="table-wrap" style="max-height:260px;overflow:auto">
+      <table><thead><tr><th>Receipt No.</th><th>Date</th><th>Sender</th><th class="num">Paid In</th><th>Status</th></tr></thead>
+      <tbody>${newRows.slice(0,50).map(r=>`<tr><td>${escapeHtml(r.receiptNo)}</td><td>${escapeHtml(r.date)}</td><td>${escapeHtml(r.senderName||'—')}</td><td class="num">${r.paidIn?fmt(r.paidIn):'—'}</td><td><span class="tag tag-green">New</span></td></tr>`).join('') || `<tr class="empty-row"><td colspan="5">No new transactions to import — all detected rows already exist.</td></tr>`}
+      ${newRows.length>50? `<tr><td colspan="5" class="muted" style="text-align:center">…and ${newRows.length-50} more</td></tr>`:''}
+      </tbody></table>
+    </div>
+    <div class="modal-actions"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn btn-primary" ${newRows.length?'':'disabled'} onclick="mpesaConfirmImport()">Confirm Import (${newRows.length})</button></div>
+    `, true);
+  } catch(err){
+    if(err && err.code === 'PASSWORD_REQUIRED'){
+      errEl.textContent = document.getElementById('mp_pass').value ? 'Incorrect password — please try again.' : 'This PDF is password-protected. Enter the password above.';
+    } else {
+      errEl.textContent = err.message || 'Could not process this PDF.';
+    }
+    errEl.style.display='block';
+  }
+  btn.disabled = false; btn.textContent = 'Preview Statement';
+}
+
+function mpesaConfirmImport(){
+  if(!mpesaPending || !mpesaPending.newRows.length){ closeModal(); return; }
+  const { filename, newRows, dupRows, invalidRows } = mpesaPending;
+  const created = [];
+  newRows.forEach(r=>{
+    const memberId = r.senderName ? findOrCreateMemberByName(r.senderName) : null;
+    const tx = {
+      id: uid('mp'), key: mpesaRowKey(r), receiptNo: r.receiptNo, completionTime: r.completionTime, date: r.date,
+      details: r.details, status: r.status, paidIn: r.paidIn, withdrawn: r.withdrawn, balance: r.balance,
+      senderName: r.senderName, memberId, category: 'Uncategorized', linkedType: null, linkedId: null,
+      periodYear: null, periodMonth: null, periodWeek: null,
+      sourceFile: filename, importedAt: new Date().toISOString()
+    };
+    DB.mpesaTransactions.push(tx);
+    created.push(tx);
+  });
+  const imp = {
+    id: uid('mpi'), filename, importedAt: new Date().toISOString(),
+    detected: newRows.length+dupRows.length+invalidRows.length, newCount: newRows.length,
+    dupCount: dupRows.length, invalidCount: invalidRows.length
+  };
+  DB.mpesaImports.push(imp);
+  logAudit('Imported M-Pesa statement '+filename, null, {new:newRows.length, duplicates:dupRows.length, invalid:invalidRows.length});
+  saveDB(); closeModal(); mpesaPending = null;
+  toast(newRows.length+' new transaction(s) imported'+(dupRows.length?', '+dupRows.length+' duplicate(s) skipped':''));
+  renderMpesaStatement();
+}
+
+function mpesaFixFormUpdateWeek(){
+  const y = val('mf_pyear'), m = val('mf_pmonth');
+  const weekSel = document.getElementById('mf_pweek');
+  if(weekSel) weekSel.innerHTML = weekOptions(y, m, weekSel.value);
+}
+function mpesaFixFormToggleCategory(){
+  const cat = val('mf_category');
+  const periodBox = document.getElementById('mf_periodBox');
+  const weekField = document.getElementById('mf_weekField');
+  if(periodBox) periodBox.style.display = (cat==='Savings'||cat==='Monthly Contribution') ? '' : 'none';
+  if(weekField) weekField.style.display = cat==='Savings' ? '' : 'none';
+}
+function openMpesaMemberFix(txId){
+  const tx = DB.mpesaTransactions.find(t=>t.id===txId);
+  if(!tx) return;
+  const p = periodFromDate(tx.date || todayISO());
+  const py = tx.periodYear || p.year, pm = tx.periodMonth || p.month, pw = tx.periodWeek || p.week;
+  const cat = tx.category || 'Uncategorized';
+  const showPeriod = cat==='Savings' || cat==='Monthly Contribution';
+  openModal(`<h3>Fix Member &amp; Categorize</h3><div class="modal-sub">Extracted from statement: <b>${escapeHtml(tx.senderName||'—')}</b> · ${fmt(tx.paidIn||0)}</div>
+  <div class="field"><label>Link to Existing Member</label><select id="mf_existing"><option value="">— Use name below instead —</option>${DB.members.map(m=>`<option value="${m.id}" ${tx.memberId===m.id?'selected':''}>${escapeHtml(m.name)}</option>`).join('')}</select></div>
+  <div class="field"><label>Or Set/Correct Name (creates a member if new)</label><input id="mf_name" value="${escapeHtml(tx.senderName||'')}"></div>
+  <div class="field"><label>Transaction Category</label><select id="mf_category" onchange="mpesaFixFormToggleCategory()">
+    <option value="Uncategorized" ${cat==='Uncategorized'?'selected':''}>Uncategorized</option>
+    <option value="Savings" ${cat==='Savings'?'selected':''}>Savings</option>
+    <option value="Monthly Contribution" ${cat==='Monthly Contribution'?'selected':''}>Monthly Contribution</option>
+  </select></div>
+  <div id="mf_periodBox" style="display:${showPeriod?'':'none'}">
+    <div class="form-note">Accounting Period — required for Savings and Monthly Contribution. The M-Pesa payment date/time is kept as-is.</div>
+    <div class="field-row">
+      <div class="field"><label>Period Year</label><select id="mf_pyear" onchange="mpesaFixFormUpdateWeek()">${yearOptions(py)}</select></div>
+      <div class="field"><label>Period Month</label><select id="mf_pmonth" onchange="mpesaFixFormUpdateWeek()">${monthOptions(pm)}</select></div>
+      <div class="field" id="mf_weekField" style="display:${cat==='Savings'?'':'none'}"><label>Period Week</label><select id="mf_pweek">${weekOptions(py, pm, pw)}</select></div>
+    </div>
+  </div>
+  <div class="modal-actions"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="mpesaSaveMemberFix('${txId}')">Save</button></div>`);
+}
+function mpesaSaveMemberFix(txId){
+  const tx = DB.mpesaTransactions.find(t=>t.id===txId);
+  if(!tx) return;
+  const existing = val('mf_existing');
+  let memberId;
+  if(existing){ memberId = existing; const mm = DB.members.find(x=>x.id===existing); tx.senderName = mm ? mm.name : tx.senderName; }
+  else {
+    const name = val('mf_name');
+    if(!name){ toast('Enter a name or choose an existing member'); return; }
+    memberId = findOrCreateMemberByName(name);
+    tx.senderName = mpesaTitleCase(name);
+  }
+  const category = val('mf_category');
+  let periodYear = null, periodMonth = null, periodWeek = null;
+  if(category==='Savings' || category==='Monthly Contribution'){
+    periodYear = Number(val('mf_pyear')); periodMonth = Number(val('mf_pmonth'));
+    if(category==='Savings') periodWeek = Number(val('mf_pweek'));
+    if(!periodYear || !periodMonth || (category==='Savings' && !periodWeek)){
+      toast('Select the accounting period (Year'+(category==='Savings'?', Month and Week':' and Month')+')'); return;
+    }
+  }
+  tx.memberId = memberId;
+  if(tx.linkedType==='savings' && tx.linkedId){ const s=DB.savings.find(x=>x.id===tx.linkedId); if(s) s.memberId = memberId; }
+  if(tx.linkedType==='contribution' && tx.linkedId){ const c=DB.contributions.find(x=>x.id===tx.linkedId); if(c) c.memberId = memberId; }
+
+  // Re-link the underlying Savings/Contribution record to match the (possibly new) category and period.
+  if(tx.linkedType==='savings' && tx.linkedId) DB.savings = DB.savings.filter(s=>s.id!==tx.linkedId);
+  if(tx.linkedType==='contribution' && tx.linkedId) DB.contributions = DB.contributions.filter(c=>c.id!==tx.linkedId);
+  tx.linkedType = null; tx.linkedId = null; tx.periodYear = null; tx.periodMonth = null; tx.periodWeek = null;
+
+  if(category==='Savings'){
+    const s = {id:uid('sav'), memberId, date:tx.date||todayISO(), amount:tx.paidIn, type:'mpesa', direction:'deposit', source:'M-Pesa', mpesaTxId:tx.id, reference:tx.receiptNo, periodYear, periodMonth, periodWeek};
+    DB.savings.push(s); tx.linkedType='savings'; tx.linkedId=s.id;
+    tx.periodYear = periodYear; tx.periodMonth = periodMonth; tx.periodWeek = periodWeek;
+  } else if(category==='Monthly Contribution'){
+    const status = tx.paidIn >= DB.settings.contributionAmount ? 'Full' : (tx.paidIn>0?'Partial':'Late');
+    const c = {id:uid('con'), memberId, date:tx.date||todayISO(), amount:tx.paidIn, method:'M-Pesa', reference:tx.receiptNo, status, source:'M-Pesa', mpesaTxId:tx.id, periodYear, periodMonth};
+    DB.contributions.push(c); tx.linkedType='contribution'; tx.linkedId=c.id;
+    tx.periodYear = periodYear; tx.periodMonth = periodMonth;
+  }
+  tx.category = category;
+  logAudit('Updated M-Pesa transaction '+tx.receiptNo+' — member/category/period', null, {memberId, category, periodYear, periodMonth, periodWeek});
+  saveDB(); closeModal(); toast('Transaction updated'); renderMpesaStatement();
+}
+
+function mpesaFilteredRows(){
+  const q = (document.getElementById('mpSearch')?.value || '').toLowerCase();
+  const memberF = document.getElementById('mpMemberFilter')?.value || '';
+  const catF = document.getElementById('mpCatFilter')?.value || '';
+  const fromF = document.getElementById('mpDateFrom')?.value || '';
+  const toF = document.getElementById('mpDateTo')?.value || '';
+  const yearF = document.getElementById('mpYearFilter')?.value || '';
+  const monthF = document.getElementById('mpMonthFilter')?.value || '';
+  const weekF = document.getElementById('mpWeekFilter')?.value || '';
+  return DB.mpesaTransactions.filter(t=>{
+    if(memberF && t.memberId!==memberF) return false;
+    if(catF && t.category!==catF) return false;
+    if(fromF && t.date && t.date<fromF) return false;
+    if(toF && t.date && t.date>toF) return false;
+    if(yearF && String(t.periodYear)!==String(yearF)) return false;
+    if(monthF && String(t.periodMonth)!==String(monthF)) return false;
+    if(weekF && String(t.periodWeek)!==String(weekF)) return false;
+    if(q && !((t.receiptNo||'').toLowerCase().includes(q) || (t.senderName||'').toLowerCase().includes(q) || (t.details||'').toLowerCase().includes(q))) return false;
+    return true;
+  }).sort((a,b)=> new Date(b.completionTime||b.date) - new Date(a.completionTime||a.date));
+}
+
+function renderMpesaStatement(){
+  const el = document.getElementById('page-mpesa');
+  if(!el) return;
+  const all = DB.mpesaTransactions;
+  const totalReceived = all.reduce((s,t)=>s+Number(t.paidIn||0),0);
+  const totalSavings = all.filter(t=>t.category==='Savings').reduce((s,t)=>s+Number(t.paidIn||0),0);
+  const totalContrib = all.filter(t=>t.category==='Monthly Contribution').reduce((s,t)=>s+Number(t.paidIn||0),0);
+  const totalUncat = all.filter(t=>t.category==='Uncategorized' && Number(t.paidIn||0)>0).reduce((s,t)=>s+Number(t.paidIn||0),0);
+  const membersIdentified = new Set(all.map(t=>t.memberId).filter(Boolean)).size;
+  const rows = mpesaFilteredRows();
+  const filteredTotal = rows.reduce((s,t)=>s+Number(t.paidIn||0),0);
+
+  el.innerHTML = `
+  <div class="grid grid-3">
+    <div class="stat-card"><div class="stat-label">Total Transactions</div><div class="stat-value">${all.length}</div></div>
+    <div class="stat-card blue"><div class="stat-label">Total Amount Received</div><div class="stat-value">${fmt(totalReceived)}</div></div>
+    <div class="stat-card"><div class="stat-label">Members Identified</div><div class="stat-value">${membersIdentified}</div></div>
+  </div>
+  <div class="grid grid-3" style="margin-top:16px">
+    <div class="stat-card green"><div class="stat-label">Savings</div><div class="stat-value">${fmt(totalSavings)}</div></div>
+    <div class="stat-card blue"><div class="stat-label">Monthly Contributions</div><div class="stat-value">${fmt(totalContrib)}</div></div>
+    <div class="stat-card warn"><div class="stat-label">Uncategorized</div><div class="stat-value">${fmt(totalUncat)}</div></div>
+  </div>
+  <div class="card">
+    <div class="toolbar">
+      <span class="muted">${DB.mpesaImports.length} statement(s) imported</span>
+      <button class="btn btn-sm btn-gold" onclick="exportMpesaCSV()">Export CSV</button>
+      <button class="btn btn-sm btn-gold" onclick="exportMpesaPDF()">Download PDF</button>
+      ${canEdit()?`<button class="btn btn-primary" onclick="openMpesaUploadModal()">+ Upload Statement</button>`:''}
+    </div>
+    ${DB.mpesaImports.length? `<div class="table-wrap"><table><thead><tr><th>File</th><th>Imported</th><th class="num">Detected</th><th class="num">New</th><th class="num">Duplicates</th><th class="num">Rejected</th></tr></thead>
+    <tbody>${DB.mpesaImports.slice().reverse().map(i=>`<tr><td>${escapeHtml(i.filename)}</td><td>${new Date(i.importedAt).toLocaleString()}</td><td class="num">${i.detected}</td><td class="num">${i.newCount}</td><td class="num">${i.dupCount}</td><td class="num">${i.invalidCount}</td></tr>`).join('')}</tbody></table></div>`:''}
+  </div>
+  <div class="card">
+    <div class="toolbar">
+      <input class="search-input" id="mpSearch" placeholder="Search receipt no, sender, details..." oninput="renderMpesaStatement()" value="${escapeHtml(document.getElementById('mpSearch')?.value||'')}">
+      <select id="mpMemberFilter" onchange="renderMpesaStatement()"><option value="">All members</option>${DB.members.map(m=>`<option value="${m.id}" ${document.getElementById('mpMemberFilter')?.value===m.id?'selected':''}>${escapeHtml(m.name)}</option>`).join('')}</select>
+      <select id="mpCatFilter" onchange="renderMpesaStatement()">
+        <option value="">All categories</option>
+        <option value="Uncategorized">Uncategorized</option>
+        <option value="Savings">Savings</option>
+        <option value="Monthly Contribution">Monthly Contribution</option>
+      </select>
+      <select id="mpYearFilter" onchange="mpesaUpdateWeekOptions()">${yearOptions(document.getElementById('mpYearFilter')?.value||'', true)}</select>
+      <select id="mpMonthFilter" onchange="mpesaUpdateWeekOptions()">${monthOptions(document.getElementById('mpMonthFilter')?.value||'', true)}</select>
+      <select id="mpWeekFilter" onchange="renderMpesaStatement()">${weekOptions(document.getElementById('mpYearFilter')?.value||'', document.getElementById('mpMonthFilter')?.value||'', document.getElementById('mpWeekFilter')?.value||'', true)}</select>
+      <input type="date" id="mpDateFrom" onchange="renderMpesaStatement()" title="From date">
+      <input type="date" id="mpDateTo" onchange="renderMpesaStatement()" title="To date">
+      <span class="muted" style="margin-left:auto">${rows.length} transaction(s) · ${fmt(filteredTotal)} in view</span>
+    </div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Receipt No.</th><th>Date/Time</th><th>Period</th><th>Member / Sender</th><th class="num">Amount Received</th><th>Category</th><th>Status</th>${canEdit()?'<th>Actions</th>':''}</tr></thead>
+      <tbody>${rows.length? rows.map(t=>{
+        const hasIncome = Number(t.paidIn||0) > 0;
+        return `<tr>
+          <td>${escapeHtml(t.receiptNo)}</td>
+          <td>${escapeHtml(t.completionTime||t.date)}</td>
+          <td>${periodLabel(t.periodYear,t.periodMonth,t.periodWeek)}</td>
+          <td>${t.memberId?`<a style="cursor:pointer;color:var(--navy);font-weight:600" onclick="viewMember('${t.memberId}')">${escapeHtml(t.senderName||memberName(t.memberId))}</a>`:(t.senderName?escapeHtml(t.senderName):'<span class="muted">—</span>')}</td>
+          <td class="num">${hasIncome?fmt(t.paidIn):'—'}${t.withdrawn>0?` <span class="muted" style="font-size:11px">(out ${fmt(t.withdrawn)})</span>`:''}</td>
+          <td>${mpesaCategoryTag(t.category, hasIncome)}</td>
+          <td><span class="tag tag-green">${escapeHtml(t.status||'Completed')}</span></td>
+          ${canEdit()?`<td class="row-actions"><button class="btn btn-sm" onclick="openMpesaMemberFix('${t.id}')">${t.category==='Uncategorized'?'Categorize':'Fix Member'}</button></td>`:''}
+        </tr>`;
+      }).join(''):`<tr class="empty-row"><td colspan="8">No M-Pesa transactions imported yet.</td></tr>`}</tbody>
+    </table></div>
+  </div>`;
+}
+function mpesaUpdateWeekOptions(){
+  const yearF = document.getElementById('mpYearFilter')?.value || '';
+  const monthF = document.getElementById('mpMonthFilter')?.value || '';
+  const weekSel = document.getElementById('mpWeekFilter');
+  if(weekSel) weekSel.innerHTML = weekOptions(yearF, monthF, weekSel.value, true);
+  renderMpesaStatement();
+}
+
+function exportMpesaCSV(){
+  const rows = mpesaFilteredRows().map(t=>[t.receiptNo, t.completionTime||t.date, t.senderName||'—', t.paidIn||0, t.withdrawn||0, t.category, t.periodYear||'—', t.periodMonth?MONTH_NAMES[t.periodMonth-1]:'—', t.periodWeek||'—', t.status]);
+  exportCSV('mpesa-transactions.csv', ['Receipt No.','Completion Time','Member/Sender','Paid In','Withdrawn','Category','Year','Month','Week','Status'], rows);
+}
+function exportMpesaPDF(){
+  const rows = mpesaFilteredRows().map(t=>[t.receiptNo, t.completionTime||t.date, t.senderName||'—', t.paidIn?fmt(t.paidIn):'—', t.category, periodLabel(t.periodYear,t.periodMonth,t.periodWeek).replace(/<[^>]+>/g,''), t.status]);
+  exportPDF('M-Pesa Statement Transactions', ['Receipt No.','Completion Time','Member/Sender','Amount Received','Category','Period','Status'], rows, 'mpesa-transactions.pdf');
+}
+
+function renderMemberMpesaTab(memberId){
+  const tx = DB.mpesaTransactions.filter(t=>t.memberId===memberId).sort((a,b)=> new Date(b.completionTime||b.date) - new Date(a.completionTime||a.date));
+  const totalSavings = tx.filter(t=>t.category==='Savings').reduce((s,t)=>s+Number(t.paidIn||0),0);
+  const totalContrib = tx.filter(t=>t.category==='Monthly Contribution').reduce((s,t)=>s+Number(t.paidIn||0),0);
+  const totalUncat = tx.filter(t=>t.category==='Uncategorized').reduce((s,t)=>s+Number(t.paidIn||0),0);
+  const totalAll = tx.reduce((s,t)=>s+Number(t.paidIn||0),0);
+  return `<div class="grid grid-4">
+    <div class="stat-card green"><div class="stat-label">M-Pesa Savings</div><div class="stat-value">${fmt(totalSavings)}</div></div>
+    <div class="stat-card blue"><div class="stat-label">M-Pesa Contributions</div><div class="stat-value">${fmt(totalContrib)}</div></div>
+    <div class="stat-card warn"><div class="stat-label">Uncategorized</div><div class="stat-value">${fmt(totalUncat)}</div></div>
+    <div class="stat-card"><div class="stat-label">Total M-Pesa Payments</div><div class="stat-value">${fmt(totalAll)}</div></div>
+  </div>
+  <div class="card">${simpleTable(['Receipt No.','Date/Time','Period','Amount','Category','Status'], tx.map(t=>[t.receiptNo, t.completionTime||t.date, periodLabel(t.periodYear,t.periodMonth,t.periodWeek), t.paidIn?fmt(t.paidIn):'—', mpesaCategoryTag(t.category, Number(t.paidIn||0)>0), t.status]))}</div>`;
+}
+
 /* ---------------------- Navigation / Boot ---------------------- */
 function initPages(){
   const c = document.getElementById('pages');
@@ -2251,6 +2923,7 @@ function initNav(){
 function renderPage(key){
   const map = {
     dashboard:renderDashboard, members:renderMembers, contributions:renderContributions, savings:renderSavings,
+    mpesa:renderMpesaStatement,
     penalties:renderPenalties, loans:renderLoans, guarantors:renderGuarantors, incomeexpense:renderIncomeExpense,
     cashbook:renderCashbook, reports:renderReports, statements:renderStatements, notifications:renderNotifications,
     meetings:renderMeetings, dividends:renderDividends, users:renderUsers, settings:renderSettings, audit:renderAudit,
